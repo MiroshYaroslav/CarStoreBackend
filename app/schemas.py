@@ -87,3 +87,36 @@ class PhoneNumberRead(PhoneNumberBase):
     id: int
     created_at: Optional[datetime.datetime] = None
     model_config = {"from_attributes": True}
+
+class UserBase(BaseModel):
+    email: str
+    username: Optional[str] = None
+
+class UserCreate(UserBase):
+    password: str
+
+class UserUpdate(BaseModel):
+    email: Optional[str] = None
+    username: Optional[str] = None
+    password_hash: Optional[str] = None
+
+class UserRead(UserBase):
+    id: int
+    created_at: Optional[datetime.datetime] = None
+    model_config = {"from_attributes": True}
+
+class FavoriteBase(BaseModel):
+    user_id: int
+    product_id: int
+
+class FavoriteCreate(FavoriteBase):
+    pass
+
+class FavoriteUpdate(BaseModel):
+    user_id: Optional[int] = None
+    product_id: Optional[int] = None
+
+class FavoriteRead(FavoriteBase):
+    id: int
+    created_at: Optional[datetime.datetime] = None
+    model_config = {"from_attributes": True}

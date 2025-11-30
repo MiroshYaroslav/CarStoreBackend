@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Numeric, ForeignKey, SmallInteger, TIMESTAMP, func
+from sqlalchemy import Column, Integer, String, Text, Numeric, ForeignKey, SmallInteger, TIMESTAMP, func, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -48,3 +48,28 @@ class PhoneNumber(Base):
     number = Column(String(20), nullable=False)
     description = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    username = Column(String(100), unique=True, nullable=True)
+
+    favorites = relationship("Favorite", back_populates="user", cascade="all, delete-orphan")
+
+class Favorite(Base):
+    __tablename__ = "favorites"
+    __table_args__ = (
+        UniqueConstraint("user_id", "product_id", name="uq_favorites_user_product"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("product.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+    user = relationship("User", back_populates="favorites")
+    product = relationship("Product")

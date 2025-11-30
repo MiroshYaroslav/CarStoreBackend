@@ -8,7 +8,7 @@ from starlette.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.database import engine
-from app.routers import categories, products, reviews, phone_numbers
+from app.routers import categories, products, reviews, phone_numbers, users, favorites
 
 logger = logging.getLogger("bmw_api")
 logger.setLevel(logging.INFO)
@@ -45,6 +45,8 @@ app.include_router(categories.router)
 app.include_router(products.router)
 app.include_router(reviews.router)
 app.include_router(phone_numbers.router)
+app.include_router(users.router)
+app.include_router(favorites.router)
 
 @app.get("/")
 def root():

@@ -71,7 +71,6 @@ async def update_review(review_id: int, update: schemas.ReviewUpdate, db: AsyncS
         if not review:
             raise HTTPException(status_code=404, detail="Review not found")
         data = update.model_dump(exclude_unset=True)
-        # Validate rating if provided
         if "rating" in data:
             rating = data["rating"]
             if rating is not None and not (1 <= int(rating) <= 5):
