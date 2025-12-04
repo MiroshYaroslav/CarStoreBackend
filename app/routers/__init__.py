@@ -1,4 +1,4 @@
-from . import categories, products, reviews, phone_numbers, users, favorites
+from . import categories, products, reviews, phone_numbers, users, favorites, cart
 
-__all__ = ["categories", "products", "reviews", "phone_numbers", "users", "favorites"]
+__all__ = ["categories", "products", "reviews", "phone_numbers", "users", "favorites", "cart"]
 

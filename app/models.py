@@ -1,6 +1,8 @@
-from sqlalchemy import Column, Integer, String, Text, Numeric, ForeignKey, SmallInteger, TIMESTAMP, func, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, Numeric, ForeignKey, SmallInteger, TIMESTAMP, func, \
+    UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base
+
 
 class Category(Base):
     __tablename__ = "category"
@@ -11,23 +13,68 @@ class Category(Base):
 
     products = relationship("Product", back_populates="category")
 
+
 class Product(Base):
     __tablename__ = "product"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
-    price = Column(Numeric(10,2), nullable=False)
+    base_price = Column(Numeric(10, 2), nullable=False)
     category_id = Column(Integer, ForeignKey("category.id", ondelete="SET NULL"), nullable=True)
-
-    power = Column(Integer, nullable=True)
-    top_speed = Column(Integer, nullable=True)
-    acceleration = Column(Numeric(4,2), nullable=True)
-
     image = Column(String, nullable=True)
+
 
     category = relationship("Category", back_populates="products")
     reviews = relationship("Review", back_populates="product")
+
+    engines = relationship("ProductEngine", back_populates="product", cascade="all, delete-orphan")
+    colors = relationship("ProductColor", back_populates="product", cascade="all, delete-orphan")
+    trims = relationship("ProductTrim", back_populates="product", cascade="all, delete-orphan")
+
+
+class ProductEngine(Base):
+    __tablename__ = "product_engine"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("product.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    volume = Column(Numeric(3, 1), nullable=False)
+    power = Column(Integer, nullable=False)
+    acceleration = Column(Numeric(4, 2), nullable=False)
+
+    top_speed = Column(Integer, nullable=True)
+
+    price_modifier = Column(Numeric(10, 2), default=0)
+    fuel_type = Column(String(50), default="Petrol")
+
+    product = relationship("Product", back_populates="engines")
+
+
+class ProductColor(Base):
+    __tablename__ = "product_color"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("product.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(50), nullable=False)
+    hex_code = Column(String(7))
+    price_modifier = Column(Numeric(10, 2), default=0)
+    image_url = Column(String(255))
+
+    product = relationship("Product", back_populates="colors")
+
+
+class ProductTrim(Base):
+    __tablename__ = "product_trim"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("product.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    price_modifier = Column(Numeric(10, 2), default=0)
+
+    product = relationship("Product", back_populates="trims")
+
 
 class Review(Base):
     __tablename__ = "review"
@@ -41,6 +88,7 @@ class Review(Base):
 
     product = relationship("Product", back_populates="reviews")
 
+
 class PhoneNumber(Base):
     __tablename__ = "phone_number"
 
@@ -48,6 +96,7 @@ class PhoneNumber(Base):
     number = Column(String(20), nullable=False)
     description = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
+
 
 class User(Base):
     __tablename__ = "users"
@@ -59,6 +108,8 @@ class User(Base):
     username = Column(String(100), unique=True, nullable=True)
 
     favorites = relationship("Favorite", back_populates="user", cascade="all, delete-orphan")
+    cart_items = relationship("CartItem", back_populates="user", cascade="all, delete-orphan")
+
 
 class Favorite(Base):
     __tablename__ = "favorites"
@@ -73,3 +124,26 @@ class Favorite(Base):
 
     user = relationship("User", back_populates="favorites")
     product = relationship("Product")
+
+
+class CartItem(Base):
+    __tablename__ = "cart_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("product.id", ondelete="CASCADE"), nullable=False)
+
+    engine_id = Column(Integer, ForeignKey("product_engine.id"), nullable=True)
+    color_id = Column(Integer, ForeignKey("product_color.id"), nullable=True)
+    trim_id = Column(Integer, ForeignKey("product_trim.id"), nullable=True)
+
+    quantity = Column(Integer, nullable=False, default=1)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="cart_items")
+    product = relationship("Product")
+
+    engine = relationship("ProductEngine")
+    color = relationship("ProductColor")
+    trim = relationship("ProductTrim")

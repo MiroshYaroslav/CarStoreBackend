@@ -7,20 +7,30 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.database import engine
-from app.routers import categories, products, reviews, phone_numbers, users, favorites
+from app.database import engine, Base
+from app import models
+from app.routers import categories, products, reviews, phone_numbers, users, favorites, cart
 
 logger = logging.getLogger("bmw_api")
 logger.setLevel(logging.INFO)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Таблиці в базі даних перевірено/створено.")
+    except SQLAlchemyError as e:
+        logger.exception("Помилка створення таблиць: %s", e)
+
+    try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
-        logger.info("✅ Підключення до бази даних успішне!")
+        logger.info("Підключення до бази даних успішне!")
     except SQLAlchemyError as db_err:
-        logger.exception("❌ Помилка підключення до БД: %s", db_err)
+        logger.exception("Помилка підключення до БД: %s", db_err)
+
     yield
     logger.info("Штатне завершення роботи додатку")
 
@@ -47,6 +57,7 @@ app.include_router(reviews.router)
 app.include_router(phone_numbers.router)
 app.include_router(users.router)
 app.include_router(favorites.router)
+app.include_router(cart.router)
 
 @app.get("/")
 def root():

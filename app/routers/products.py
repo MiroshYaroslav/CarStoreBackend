@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
+from sqlalchemy import asc, desc, func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import asc, desc
 import logging
 
 from app.database import get_db
@@ -14,19 +15,22 @@ logger = logging.getLogger("bmw_api.products")
 
 @router.get("/", response_model=list[schemas.ProductRead])
 async def get_products(
-    category_id: list[int] | None = Query(None, description="Filter by category_id"),
-    search: str | None = Query(None, description="Search by product name"),
-    min_price: float | None = Query(None, description="Minimum price"),
-    max_price: float | None = Query(None, description="Maximum price"),
-    sort: str | None = Query(
-        None,
-        description="Sort: price-asc, price-desc, power-asc, power-desc, top_speed-asc, top_speed-desc"
-    ),
-    db: AsyncSession = Depends(get_db),
+        category_id: list[int] | None = Query(None, description="Filter by category_id"),
+        search: str | None = Query(None, description="Search by product name"),
+        min_price: float | None = Query(None, description="Minimum base price"),
+        max_price: float | None = Query(None, description="Maximum base price"),
+        sort: str | None = Query(
+            None,
+            description="Sort options: price-asc, price-desc, power-asc, power-desc"
+        ),
+        db: AsyncSession = Depends(get_db),
 ):
-
     try:
-        query = select(models.Product)
+        query = select(models.Product).options(
+            selectinload(models.Product.engines),
+            selectinload(models.Product.colors),
+            selectinload(models.Product.trims)
+        )
 
         if category_id:
             query = query.where(models.Product.category_id.in_(category_id))
@@ -35,38 +39,45 @@ async def get_products(
             query = query.where(models.Product.name.ilike(f"%{search.strip()}%"))
 
         if min_price is not None:
-            query = query.where(models.Product.price >= min_price)
+            query = query.where(models.Product.base_price >= min_price)
         if max_price is not None:
-            query = query.where(models.Product.price <= max_price)
+            query = query.where(models.Product.base_price <= max_price)
 
         if sort:
             if sort == "price-asc":
-                query = query.order_by(asc(models.Product.price))
+                query = query.order_by(asc(models.Product.base_price))
             elif sort == "price-desc":
-                query = query.order_by(desc(models.Product.price))
-            elif sort == "power-asc":
-                query = query.order_by(asc(models.Product.power))
-            elif sort == "power-desc":
-                query = query.order_by(desc(models.Product.power))
-            elif sort == "top_speed-asc":
-                query = query.order_by(asc(models.Product.top_speed))
-            elif sort == "top_speed-desc":
-                query = query.order_by(desc(models.Product.top_speed))
+                query = query.order_by(desc(models.Product.base_price))
+            elif sort in ["power-asc", "power-desc"]:
+                max_power_subquery = (
+                    select(func.max(models.ProductEngine.power))
+                    .where(models.ProductEngine.product_id == models.Product.id)
+                    .scalar_subquery()
+                )
+
+                if sort == "power-asc":
+                    query = query.order_by(asc(max_power_subquery))
+                elif sort == "power-desc":
+                    query = query.order_by(desc(max_power_subquery))
 
         result = await db.execute(query)
-        return result.scalars().all()
+        return result.scalars().unique().all()
 
-    except Exception:
+    except Exception as e:
+        logger.exception(e)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{product_id}", response_model=schemas.ProductRead)
 async def get_product(product_id: int, db: AsyncSession = Depends(get_db)):
-
     try:
-        result = await db.execute(
-            select(models.Product).where(models.Product.id == product_id)
-        )
+        query = select(models.Product).options(
+            selectinload(models.Product.engines),
+            selectinload(models.Product.colors),
+            selectinload(models.Product.trims)
+        ).where(models.Product.id == product_id)
+
+        result = await db.execute(query)
         product = result.scalars().first()
 
         if not product:
@@ -76,95 +87,70 @@ async def get_product(product_id: int, db: AsyncSession = Depends(get_db)):
 
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
+        logger.exception(e)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/", response_model=schemas.ProductRead)
-async def create_product(
-    product: schemas.ProductCreate,
-    db: AsyncSession = Depends(get_db)
+
+@router.post("/{product_id}/engines", response_model=schemas.EngineRead)
+async def create_product_engine(
+        product_id: int,
+        engine: schemas.EngineCreate,
+        db: AsyncSession = Depends(get_db)
 ):
+    product = await db.get(models.Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
 
+    new_engine = models.ProductEngine(**engine.model_dump(), product_id=product_id)
+    db.add(new_engine)
     try:
-        payload = product.model_dump()
-
-        if payload.get("category_id") == 0:
-            payload["category_id"] = None
-
-        if payload.get("category_id") is not None:
-            res = await db.execute(
-                select(models.Category).where(models.Category.id == payload["category_id"])
-            )
-            if not res.scalars().first():
-                raise HTTPException(status_code=400, detail="category_id not found")
-
-        new_product = models.Product(**payload)
-
-        db.add(new_product)
-        try:
-            await db.commit()
-            await db.refresh(new_product)
-        except IntegrityError as e:
-            await db.rollback()
-            raise HTTPException(status_code=400, detail="Database integrity error")
-
-        return new_product
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(e)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.patch("/{product_id}", response_model=schemas.ProductRead)
-async def update_product(product_id: int, update: schemas.ProductUpdate, db: AsyncSession = Depends(get_db)):
-    try:
-        result = await db.execute(select(models.Product).where(models.Product.id == product_id))
-        product = result.scalars().first()
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
-
-        data = update.model_dump(exclude_unset=True)
-
-        if "category_id" in data and data["category_id"] == 0:
-            data["category_id"] = None
-
-        if "category_id" in data and data["category_id"] is not None:
-            res = await db.execute(select(models.Category).where(models.Category.id == data["category_id"]))
-            if not res.scalars().first():
-                raise HTTPException(status_code=400, detail="category_id not found")
-
-        for k, v in data.items():
-            setattr(product, k, v)
         await db.commit()
-        await db.refresh(product)
-        return product
-    except HTTPException:
-        raise
+        await db.refresh(new_engine)
+        return new_engine
     except Exception as e:
         logger.exception(e)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Error creating engine")
 
 
-@router.delete("/{product_id}", response_model=dict)
-async def delete_product(product_id: int, db: AsyncSession = Depends(get_db)):
+@router.post("/{product_id}/colors", response_model=schemas.ColorRead)
+async def create_product_color(
+        product_id: int,
+        color: schemas.ColorCreate,
+        db: AsyncSession = Depends(get_db)
+):
+    product = await db.get(models.Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
 
+    new_color = models.ProductColor(**color.model_dump(), product_id=product_id)
+    db.add(new_color)
     try:
-        result = await db.execute(select(models.Product).where(models.Product.id == product_id))
-        product = result.scalars().first()
-
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
-
-        await db.delete(product)
         await db.commit()
-
-        return {"status": "ok", "message": f"Product {product_id} deleted successfully"}
-
-    except HTTPException:
-        raise
+        await db.refresh(new_color)
+        return new_color
     except Exception as e:
         logger.exception(e)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Error creating color")
+
+
+@router.post("/{product_id}/trims", response_model=schemas.TrimRead)
+async def create_product_trim(
+        product_id: int,
+        trim: schemas.TrimCreate,
+        db: AsyncSession = Depends(get_db)
+):
+    product = await db.get(models.Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    new_trim = models.ProductTrim(**trim.model_dump(), product_id=product_id)
+    db.add(new_trim)
+    try:
+        await db.commit()
+        await db.refresh(new_trim)
+        return new_trim
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(status_code=500, detail="Error creating trim")

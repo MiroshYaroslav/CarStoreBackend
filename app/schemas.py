@@ -1,6 +1,51 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import datetime
+
+
+class EngineBase(BaseModel):
+    name: str
+    volume: float
+    power: int
+    acceleration: float
+    top_speed: Optional[int] = None
+    price_modifier: float = 0
+    fuel_type: Optional[str] = "Petrol"
+
+class EngineCreate(EngineBase):
+    pass
+
+class EngineRead(EngineBase):
+    id: int
+    model_config = {"from_attributes": True}
+
+
+class ColorBase(BaseModel):
+    name: str
+    hex_code: Optional[str] = None
+    price_modifier: float = 0
+    image_url: Optional[str] = None
+
+class ColorCreate(ColorBase):
+    pass
+
+class ColorRead(ColorBase):
+    id: int
+    model_config = {"from_attributes": True}
+
+
+class TrimBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price_modifier: float = 0
+
+class TrimCreate(TrimBase):
+    pass
+
+class TrimRead(TrimBase):
+    id: int
+    model_config = {"from_attributes": True}
+
 
 class CategoryBase(BaseModel):
     name: str
@@ -21,15 +66,9 @@ class CategoryRead(CategoryBase):
 class ProductBase(BaseModel):
     name: str
     description: Optional[str] = None
-    price: float
+    base_price: float
     category_id: Optional[int] = None
-
-    power: Optional[int] = None
-    top_speed: Optional[int] = None
-    acceleration: Optional[float] = None
-
     image: Optional[str] = None
-
 
 class ProductCreate(ProductBase):
     pass
@@ -37,20 +76,17 @@ class ProductCreate(ProductBase):
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    price: Optional[float] = None
+    base_price: Optional[float] = None
     category_id: Optional[int] = None
-    power: Optional[int] = None
-    top_speed: Optional[int] = None
-    acceleration: Optional[float] = None
     image: Optional[str] = None
-
 
 class ProductRead(ProductBase):
     id: int
+    engines: List[EngineRead] = []
+    colors: List[ColorRead] = []
+    trims: List[TrimRead] = []
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = {"from_attributes": True}
 
 
 class ReviewBase(BaseModel):
@@ -72,6 +108,7 @@ class ReviewRead(ReviewBase):
     created_at: Optional[datetime.datetime]
     model_config = {"from_attributes": True}
 
+
 class PhoneNumberBase(BaseModel):
     number: str
     description: Optional[str] = None
@@ -87,6 +124,7 @@ class PhoneNumberRead(PhoneNumberBase):
     id: int
     created_at: Optional[datetime.datetime] = None
     model_config = {"from_attributes": True}
+
 
 class UserBase(BaseModel):
     email: str
@@ -105,6 +143,7 @@ class UserRead(UserBase):
     created_at: Optional[datetime.datetime] = None
     model_config = {"from_attributes": True}
 
+
 class FavoriteBase(BaseModel):
     user_id: int
     product_id: int
@@ -119,4 +158,36 @@ class FavoriteUpdate(BaseModel):
 class FavoriteRead(FavoriteBase):
     id: int
     created_at: Optional[datetime.datetime] = None
+    model_config = {"from_attributes": True}
+
+
+class CartItemBase(BaseModel):
+    user_id: int
+    product_id: int
+    quantity: int = 1
+    engine_id: Optional[int] = None
+    color_id: Optional[int] = None
+    trim_id: Optional[int] = None
+
+class CartItemCreate(BaseModel):
+    user_id: int
+    product_id: int
+    quantity: int = 1
+    engine_id: Optional[int] = None
+    color_id: Optional[int] = None
+    trim_id: Optional[int] = None
+
+class CartItemUpdate(BaseModel):
+    quantity: Optional[int] = None
+
+class CartItemRead(CartItemBase):
+    id: int
+    created_at: Optional[datetime.datetime] = None
+    updated_at: Optional[datetime.datetime] = None
+
+    product: Optional[ProductBase] = None
+    engine: Optional[EngineRead] = None
+    color: Optional[ColorRead] = None
+    trim: Optional[TrimRead] = None
+
     model_config = {"from_attributes": True}

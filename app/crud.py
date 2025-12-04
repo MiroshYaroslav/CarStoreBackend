@@ -28,3 +28,4 @@ async def get_reviews(db: AsyncSession):
     except Exception:
         logger.exception("Error in get_reviews")
         raise
+
