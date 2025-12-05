@@ -1,6 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
-import datetime
+from datetime import datetime
 
 
 class EngineBase(BaseModel):
@@ -105,7 +105,7 @@ class ReviewUpdate(BaseModel):
 
 class ReviewRead(ReviewBase):
     id: int
-    created_at: Optional[datetime.datetime]
+    created_at: Optional[datetime]
     model_config = {"from_attributes": True}
 
 
@@ -122,7 +122,7 @@ class PhoneNumberUpdate(BaseModel):
 
 class PhoneNumberRead(PhoneNumberBase):
     id: int
-    created_at: Optional[datetime.datetime] = None
+    created_at: Optional[datetime] = None
     model_config = {"from_attributes": True}
 
 
@@ -140,7 +140,7 @@ class UserUpdate(BaseModel):
 
 class UserRead(UserBase):
     id: int
-    created_at: Optional[datetime.datetime] = None
+    created_at: Optional[datetime] = None
     model_config = {"from_attributes": True}
 
 
@@ -157,7 +157,7 @@ class FavoriteUpdate(BaseModel):
 
 class FavoriteRead(FavoriteBase):
     id: int
-    created_at: Optional[datetime.datetime] = None
+    created_at: Optional[datetime] = None
     model_config = {"from_attributes": True}
 
 
@@ -182,8 +182,8 @@ class CartItemUpdate(BaseModel):
 
 class CartItemRead(CartItemBase):
     id: int
-    created_at: Optional[datetime.datetime] = None
-    updated_at: Optional[datetime.datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     product: Optional[ProductBase] = None
     engine: Optional[EngineRead] = None
@@ -191,3 +191,34 @@ class CartItemRead(CartItemBase):
     trim: Optional[TrimRead] = None
 
     model_config = {"from_attributes": True}
+
+class OrderCreate(BaseModel):
+    first_name: str
+    last_name: str
+    email: str
+    phone: str
+    address: str
+
+class OrderItemRead(BaseModel):
+    id: int
+    product: ProductRead
+    engine: EngineRead | None = None
+    color: ColorRead | None = None
+    trim: TrimRead | None = None
+    quantity: int
+    price_per_unit: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+class OrderRead(BaseModel):
+    id: int
+    created_at: datetime
+    status: str
+    total_price: float
+    first_name: str
+    last_name: str
+    phone: str
+    address: str
+    items: list[OrderItemRead] = []
+
+    model_config = ConfigDict(from_attributes=True)

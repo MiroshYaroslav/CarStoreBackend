@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.database import engine, Base
 from app import models
-from app.routers import categories, products, reviews, phone_numbers, users, favorites, cart
+from app.routers import categories, products, reviews, phone_numbers, users, favorites, cart, orders
 
 logger = logging.getLogger("bmw_api")
 logger.setLevel(logging.INFO)
@@ -58,6 +58,7 @@ app.include_router(phone_numbers.router)
 app.include_router(users.router)
 app.include_router(favorites.router)
 app.include_router(cart.router)
+app.include_router(orders.router)
 
 @app.get("/")
 def root():

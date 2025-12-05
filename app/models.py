@@ -1,7 +1,8 @@
 from sqlalchemy import Column, Integer, String, Text, Numeric, ForeignKey, SmallInteger, TIMESTAMP, func, \
-    UniqueConstraint
+    UniqueConstraint, DateTime, Float
 from sqlalchemy.orm import relationship
 from app.database import Base
+from datetime import datetime, timezone
 
 
 class Category(Base):
@@ -109,6 +110,7 @@ class User(Base):
 
     favorites = relationship("Favorite", back_populates="user", cascade="all, delete-orphan")
     cart_items = relationship("CartItem", back_populates="user", cascade="all, delete-orphan")
+    orders = relationship("Order", back_populates="user")
 
 
 class Favorite(Base):
@@ -144,6 +146,48 @@ class CartItem(Base):
     user = relationship("User", back_populates="cart_items")
     product = relationship("Product")
 
+    engine = relationship("ProductEngine")
+    color = relationship("ProductColor")
+    trim = relationship("ProductTrim")
+
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+    status = Column(String, default="pending")
+    total_price = Column(Float)
+
+    first_name = Column(String)
+    last_name = Column(String)
+    email = Column(String)
+    phone = Column(String)
+    address = Column(String)
+
+    user = relationship("User", back_populates="orders")
+    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
+
+class OrderItem(Base):
+    __tablename__ = "order_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"))
+    product_id = Column(Integer, ForeignKey("product.id"))
+
+    engine_id = Column(Integer, ForeignKey("product_engine.id"), nullable=True)
+    color_id = Column(Integer, ForeignKey("product_color.id"), nullable=True)
+    trim_id = Column(Integer, ForeignKey("product_trim.id"), nullable=True)
+
+    quantity = Column(Integer, default=1)
+    price_per_unit = Column(Float)
+
+    order = relationship("Order", back_populates="items")
+    product = relationship("Product")
     engine = relationship("ProductEngine")
     color = relationship("ProductColor")
     trim = relationship("ProductTrim")
