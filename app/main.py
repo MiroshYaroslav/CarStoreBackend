@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.database import engine, Base
 from app import models
-from app.routers import categories, products, reviews, phone_numbers, users, favorites, cart, orders
+from app.routers import categories, products, reviews, phone_numbers, users, favorites, cart, orders, auth
 
 logger = logging.getLogger("bmw_api")
 logger.setLevel(logging.INFO)
@@ -60,6 +60,7 @@ app.include_router(favorites.router)
 app.include_router(cart.router)
 app.include_router(orders.router)
 
+app.include_router(auth.router)
 @app.get("/")
 def root():
     return {"message": "BMW Catalog API works!"}
