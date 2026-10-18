@@ -1,15 +1,22 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
-from app.database import engine, Base
-from app import models
-from app.routers import categories, products, reviews, phone_numbers, users, favorites, cart, orders, auth
+from app.api.router import router as api_router
+from app.core.config import settings
+from app.core.database import engine
+from app.exceptions.base import AppException
+from app.exceptions.handlers import (
+    app_exception_handler,
+    global_exception_handler,
+    validation_exception_handler,
+)
+from app.middlewares.timing import TimingMiddleware
 
 logger = logging.getLogger("bmw_api")
 logger.setLevel(logging.INFO)
@@ -18,68 +25,39 @@ logger.setLevel(logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("Таблиці в базі даних перевірено/створено.")
-    except SQLAlchemyError as e:
-        logger.exception("Помилка створення таблиць: %s", e)
-
-    try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
-        logger.info("Підключення до бази даних успішне!")
+        logger.info("Database connection successful.")
     except SQLAlchemyError as db_err:
-        logger.exception("Помилка підключення до БД: %s", db_err)
+        logger.exception("Database connection failed: %s", db_err)
+        raise
 
-    yield
-    logger.info("Штатне завершення роботи додатку")
+    try:
+        yield
+    finally:
+        await engine.dispose()
+        logger.info("Application shutdown complete.")
 
-app = FastAPI(
-    title="BMW Catalog API",
-    debug=True,
-    lifespan=lifespan
-)
-logger.info("MAIN.PY IS RUNNING")
 
+app = FastAPI(title=settings.PROJECT_NAME, openapi_url="/api/v1/openapi.json", lifespan=lifespan)
+
+app.add_exception_handler(AppException, app_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, global_exception_handler)
+app.add_middleware(TimingMiddleware)
+
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.mount("/images", StaticFiles(directory="app/images"), name="images")
+app.include_router(api_router, prefix="/api")
 
-app.include_router(categories.router)
-app.include_router(products.router)
-app.include_router(reviews.router)
-app.include_router(phone_numbers.router)
-app.include_router(users.router)
-app.include_router(favorites.router)
-app.include_router(cart.router)
-app.include_router(orders.router)
 
-app.include_router(auth.router)
 @app.get("/")
 def root():
-    return {"message": "BMW Catalog API works!"}
-
-logger.info("Registered routes:")
-for r in app.routes:
-    path = getattr(r, "path", None)
-    methods = getattr(r, "methods", None)
-    if path and methods:
-        logger.info("  %s %s", methods, path)
-
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    client = request.client.host if request.client else "unknown"
-    logger.info("Incoming request: %s %s from %s", request.method, request.url.path, client)
-    try:
-        response = await call_next(request)
-        logger.info("Response %s for %s %s", response.status_code, request.method, request.url.path)
-        return response
-    except Exception as exc:
-        logger.exception("Unhandled exception during request: %s", exc)
-        raise
+    return {"message": f"{settings.PROJECT_NAME} works! Go to /docs for Swagger UI"}
