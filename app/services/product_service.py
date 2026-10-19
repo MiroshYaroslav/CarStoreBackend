@@ -74,9 +74,11 @@ class ProductService(BaseService):
     async def update_product_image(self, product_id: uuid.UUID, image_url: str) -> Product | None:
         await self.get_product_or_404(product_id)
         try:
-            result = await self._products.update(product_id, {"image_url": image_url})
+            await self._products.update(product_id, {"image_url": image_url})
             await self._session.commit()
-            return result
+            # The commit expires ORM instances by default. Reload the product
+            # with its response relationships before FastAPI serializes ProductRead.
+            return await self.get_product_or_404(product_id)
         except IntegrityError:
             await self._session.rollback()
             raise ConflictException("Failed to update product image")
