@@ -20,6 +20,43 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+resource "aws_secretsmanager_secret" "db_password" {
+  name                    = "${local.name}/postgres-password"
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "db_password" {
+  secret_id     = aws_secretsmanager_secret.db_password.id
+  secret_string = var.db_password
+}
+
+resource "aws_secretsmanager_secret" "app_secret_key" {
+  name                    = "${local.name}/app-secret-key"
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "app_secret_key" {
+  secret_id     = aws_secretsmanager_secret.app_secret_key.id
+  secret_string = var.app_secret_key
+}
+
+resource "aws_iam_role_policy" "ecs_read_app_secrets" {
+  name = "${local.name}-read-app-secrets"
+  role = aws_iam_role.ecs_task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = ["secretsmanager:GetSecretValue"]
+      Resource = [
+        aws_secretsmanager_secret.db_password.arn,
+        aws_secretsmanager_secret.app_secret_key.arn
+      ]
+    }]
+  })
+}
+
 resource "aws_ecs_task_definition" "app" {
   family                   = "${local.name}-app"
   requires_compatibilities = ["FARGATE"]
@@ -35,13 +72,15 @@ resource "aws_ecs_task_definition" "app" {
     portMappings = [{ containerPort = 8000, hostPort = 8000, protocol = "tcp" }]
     environment = [
       { name = "ENVIRONMENT", value = var.environment },
-      { name = "SECRET_KEY", value = var.app_secret_key },
       { name = "POSTGRES_USER", value = var.db_username },
-      { name = "POSTGRES_PASSWORD", value = var.db_password },
       { name = "POSTGRES_DB", value = aws_db_instance.main.db_name },
       { name = "POSTGRES_HOST", value = aws_db_instance.main.address },
       { name = "POSTGRES_PORT", value = "5432" },
       { name = "AWS_REGION", value = var.aws_region }
+    ]
+    secrets = [
+      { name = "SECRET_KEY", valueFrom = aws_secretsmanager_secret.app_secret_key.arn },
+      { name = "POSTGRES_PASSWORD", valueFrom = aws_secretsmanager_secret.db_password.arn }
     ]
     logConfiguration = {
       logDriver = "awslogs"
@@ -52,14 +91,26 @@ resource "aws_ecs_task_definition" "app" {
       }
     }
   }])
-  depends_on = [aws_iam_role_policy_attachment.ecs_task_execution]
-  tags       = { Name = "${local.name}-app-task" }
+  depends_on = [
+    aws_iam_role_policy_attachment.ecs_task_execution,
+    aws_iam_role_policy.ecs_read_app_secrets
+  ]
+  tags = { Name = "${local.name}-app-task" }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+data "aws_ecs_task_definition" "active" {
+  task_definition = aws_ecs_task_definition.app.family
+  depends_on      = [aws_ecs_task_definition.app]
 }
 
 resource "aws_ecs_service" "app" {
   name            = "${local.name}-service"
   cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.app.arn
+  task_definition = data.aws_ecs_task_definition.active.arn
   desired_count   = var.ecs_desired_count
   launch_type     = "FARGATE"
 

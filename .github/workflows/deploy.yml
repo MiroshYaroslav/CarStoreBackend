@@ -9,6 +9,10 @@ permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: bmw-catalog-dev-deploy
+  cancel-in-progress: false
+
 env:
   AWS_REGION: eu-central-1
   ECR_REPOSITORY: bmw-catalog-dev
@@ -17,7 +21,7 @@ env:
 
 jobs:
   deploy:
-    name: Build and deploy
+    name: Build, migrate, and deploy
     runs-on: ubuntu-latest
 
     steps:
@@ -35,17 +39,138 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push image
+        id: build-image
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build --tag "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" --tag "$REGISTRY/$ECR_REPOSITORY:latest" .
-          docker push "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          set -euo pipefail
+          IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build --tag "$IMAGE_URI" --tag "$REGISTRY/$ECR_REPOSITORY:latest" .
+          docker push "$IMAGE_URI"
           docker push "$REGISTRY/$ECR_REPOSITORY:latest"
+          echo "image=$IMAGE_URI" >> "$GITHUB_OUTPUT"
 
-      - name: Force ECS deployment
-        run: >-
-          aws ecs update-service
-          --cluster "$ECS_CLUSTER"
-          --service "$ECS_SERVICE"
-          --force-new-deployment
+      - name: Read current task definition and service networking
+        id: service-config
+        run: |
+          set -euo pipefail
+          SERVICE_JSON="$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --region "$AWS_REGION" \
+            --output json)"
+
+          CURRENT_TASK_DEFINITION="$(jq -r '.services[0].taskDefinition // empty' <<< "$SERVICE_JSON")"
+          SUBNETS="$(jq -r '.services[0].networkConfiguration.awsvpcConfiguration.subnets | join(",")' <<< "$SERVICE_JSON")"
+          SECURITY_GROUPS="$(jq -r '.services[0].networkConfiguration.awsvpcConfiguration.securityGroups | join(",")' <<< "$SERVICE_JSON")"
+
+          if [[ -z "$CURRENT_TASK_DEFINITION" || -z "$SUBNETS" || -z "$SECURITY_GROUPS" ]]; then
+            echo "Could not read the active ECS task definition or service networking." >&2
+            exit 1
+          fi
+
+          aws ecs describe-task-definition \
+            --task-definition "$CURRENT_TASK_DEFINITION" \
+            --query taskDefinition \
+            --region "$AWS_REGION" \
+            --output json | jq '
+              del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
+              | .containerDefinitions |= map(
+                  .environment = ((.environment // []) | map(select(.name != "POSTGRES_PASSWORD" and .name != "SECRET_KEY")))
+                )
+            ' > task-definition.json
+
+          if ! jq -e '
+            any(.containerDefinitions[];
+              (any(.secrets[]?; .name == "POSTGRES_PASSWORD") and
+               any(.secrets[]?; .name == "SECRET_KEY")) and
+              (all(.environment[]?; .name != "POSTGRES_PASSWORD") and
+               all(.environment[]?; .name != "SECRET_KEY"))
+            )
+          ' task-definition.json > /dev/null; then
+            echo "Apply the Terraform Secrets Manager change before enabling this deployment workflow." >&2
+            exit 1
+          fi
+
+          echo "task-definition-path=task-definition.json" >> "$GITHUB_OUTPUT"
+          echo "subnets=$SUBNETS" >> "$GITHUB_OUTPUT"
+          echo "security-groups=$SECURITY_GROUPS" >> "$GITHUB_OUTPUT"
+
+      - name: Set new image in task definition
+        id: render-task-definition
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ steps.service-config.outputs.task-definition-path }}
+          container-name: bmw-catalog
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Register task definition and run database migrations
+        id: migration
+        env:
+          TASK_DEFINITION_FILE: ${{ steps.render-task-definition.outputs.task-definition }}
+          SUBNETS: ${{ steps.service-config.outputs.subnets }}
+          SECURITY_GROUPS: ${{ steps.service-config.outputs.security-groups }}
+        run: |
+          set -euo pipefail
+
+          jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' \
+            "$TASK_DEFINITION_FILE" > task-definition-register.json
+
+          TASK_DEFINITION_ARN="$(aws ecs register-task-definition \
+            --cli-input-json file://task-definition-register.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --region "$AWS_REGION" \
+            --output text)"
+
+          RUN_JSON="$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --launch-type FARGATE \
+            --task-definition "$TASK_DEFINITION_ARN" \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUPS],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"bmw-catalog","command":["alembic","upgrade","head"]}]}' \
+            --region "$AWS_REGION" \
+            --output json)"
+
+          echo "$RUN_JSON" | jq '{failures: .failures, tasks: [.tasks[]? | {taskArn, lastStatus}]}'
+          TASK_ARN="$(jq -r '.tasks[0].taskArn // empty' <<< "$RUN_JSON")"
+          if [[ -z "$TASK_ARN" ]]; then
+            echo "ECS did not start the database migration task." >&2
+            exit 1
+          fi
+
+          aws ecs wait tasks-stopped \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN" \
+            --region "$AWS_REGION"
+
+          TASK_RESULT="$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN" \
+            --region "$AWS_REGION" \
+            --output json)"
+          EXIT_CODE="$(jq -r '[.tasks[0].containers[] | select(.name == "bmw-catalog") | .exitCode][0] // "missing"' <<< "$TASK_RESULT")"
+
+          if [[ "$EXIT_CODE" != "0" ]]; then
+            echo "Alembic migration task failed with exit code: $EXIT_CODE" >&2
+            echo "$TASK_RESULT" | jq '.tasks[0] | {stoppedReason, containers: [.containers[] | {name, lastStatus, exitCode, reason}]}'
+            exit 1
+          fi
+
+          echo "task-definition-arn=$TASK_DEFINITION_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Update ECS service after successful migration
+        env:
+          TASK_DEFINITION_ARN: ${{ steps.migration.outputs.task-definition-arn }}
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "$TASK_DEFINITION_ARN" \
+            --region "$AWS_REGION"
+
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --region "$AWS_REGION"

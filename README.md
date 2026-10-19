@@ -105,6 +105,12 @@ docker run --rm -p 8000:8000 --env-file .env bmw-catalog-api
 
 The image runs as a non-root user and contains the API and migrations, not the test suite or local environment file. Pass configuration at runtime. In ECS, set the required application variables in the task definition and use a task role for AWS access.
 
+## AWS deployment
+
+Pushing to `main` builds an image tagged with the commit SHA, runs `alembic upgrade head` as a one-off ECS task, and updates the ECS service only after the migration task exits successfully. Keep migrations backward-compatible with the currently running application version; use an expand-and-contract sequence for changes that remove or rename existing columns.
+
+The callback contact directory is read-only through the API. Its initial entries are inserted by the Alembic migration; maintain the directory through a reviewed database migration rather than a public write endpoint.
+
 ## Project layout
 
 ```text
