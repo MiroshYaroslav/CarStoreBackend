@@ -20,6 +20,8 @@ class Settings(BaseSettings):
 
     AWS_BUCKET_NAME: str | None = None
     AWS_REGION: str | None = None
+    AWS_CLOUDFRONT_DOMAIN: str | None = None
+    PRODUCT_IMAGE_UPLOAD_ALLOWED_USER_IDS: list[str] = Field(default_factory=list)
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=True

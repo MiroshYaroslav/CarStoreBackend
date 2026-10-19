@@ -2,9 +2,11 @@ import uuid
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
-from app.api.dependencies import DBSession
+from app.api.dependencies import CurrentUser, DBSession
+from app.core.config import settings
+from app.models.user import User
 from app.repositories.product_repository import (
     ColorRepository,
     EngineRepository,
@@ -32,6 +34,23 @@ S3ServiceDep = Annotated[S3Service, Depends(get_s3_service)]
 
 
 router = APIRouter()
+
+
+def require_product_image_uploader(user: CurrentUser) -> User:
+    allowed_user_ids = {
+        user_id.strip().casefold()
+        for user_id in settings.PRODUCT_IMAGE_UPLOAD_ALLOWED_USER_IDS
+        if user_id.strip()
+    }
+    if not allowed_user_ids or str(user.id).casefold() not in allowed_user_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not allowed to upload product images",
+        )
+    return user
+
+
+ProductImageUploader = Annotated[User, Depends(require_product_image_uploader)]
 
 
 def get_product_repo(session: DBSession) -> ProductRepository:
@@ -124,10 +143,12 @@ async def soft_delete_product(product_id: uuid.UUID, service: ProductServiceDep)
 @router.post("/{product_id}/image", response_model=ProductRead)
 async def upload_product_image(
     product_id: uuid.UUID,
+    _: ProductImageUploader,
     service: ProductServiceDep,
     s3_service: S3ServiceDep,
     file: UploadFile = File(...),
 ):
+    await service.get_product_or_404(product_id)
     image_url = await s3_service.upload_image(file)
 
     return await service.update_product_image(product_id, image_url)
