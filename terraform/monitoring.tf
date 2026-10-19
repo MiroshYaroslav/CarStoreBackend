@@ -56,17 +56,33 @@ resource "aws_cloudwatch_dashboard" "main" {
           view    = "timeSeries", region = var.aws_region, period = 60,
           metrics = [["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.app.name, { stat = "Average" }]]
         }
+      },
+      {
+        type = "metric", x = 12, y = 6, width = 12, height = 6,
+        properties = {
+          title   = "ALB Request Count"
+          view    = "timeSeries", region = var.aws_region, period = 60,
+          metrics = [["AWS/ApplicationELB", "RequestCount", "LoadBalancer", aws_lb.main.arn_suffix, { stat = "Sum" }]]
+        }
+      },
+      {
+        type = "metric", x = 0, y = 12, width = 12, height = 6,
+        properties = {
+          title   = "ECS Service Memory Utilization"
+          view    = "timeSeries", region = var.aws_region, period = 60,
+          metrics = [["AWS/ECS", "MemoryUtilization", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.app.name, { stat = "Average" }]]
+        }
       }
     ]
   })
 }
 
 resource "aws_budgets_budget" "cost" {
-  name              = "${local.name}-budget"
-  budget_type       = "COST"
-  limit_amount      = "5.0"
-  limit_unit        = "USD"
-  time_unit         = "MONTHLY"
+  name         = "${local.name}-budget"
+  budget_type  = "COST"
+  limit_amount = "5.0"
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
 
   notification {
     comparison_operator        = "GREATER_THAN"

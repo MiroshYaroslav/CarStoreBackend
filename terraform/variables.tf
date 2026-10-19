@@ -55,6 +55,12 @@ variable "app_secret_key" {
   sensitive   = true
 }
 
+variable "product_image_upload_allowed_user_ids" {
+  description = "Existing application user UUIDs allowed to upload product images. Empty denies all uploads."
+  type        = list(string)
+  default     = []
+}
+
 variable "vpc_cidr" {
   description = "IPv4 CIDR block for the application VPC."
   type        = string

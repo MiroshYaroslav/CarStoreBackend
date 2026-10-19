@@ -32,7 +32,7 @@ Edit `.env` and set `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_U
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-The example includes every setting the application expects. Leave `AWS_BUCKET_NAME` empty if you are not using image uploads locally; set it and `AWS_REGION` when you configure S3. The AWS SDK uses its standard credential chain, so for local development you can use an AWS profile; on ECS, assign S3 permissions to the task role. Do not put AWS access keys in `.env` or commit them.
+The example includes every setting the application expects. Leave `AWS_BUCKET_NAME` and `AWS_CLOUDFRONT_DOMAIN` empty if you are not using image uploads locally. The AWS SDK uses its standard credential chain, so for local development you can use an AWS profile; on ECS, assign S3 permissions to the task role. Do not put AWS access keys in `.env` or commit them.
 
 ## Database
 
@@ -70,7 +70,7 @@ The login endpoint accepts OAuth2 form fields (`username` and `password`) at `PO
 
 ## Product images
 
-Upload an image with `POST /api/v1/products/{product_id}/image` as multipart form data using the `file` field. The API uploads it to the configured bucket and saves its absolute S3 URL to the product record. Configure bucket access or a CDN so clients can read the returned URLs.
+Upload an image with `POST /api/v1/products/{product_id}/image` as multipart form data using the `file` field and a Bearer access token. For AWS, the Terraform-created S3 bucket remains private; CloudFront serves images through Origin Access Control, while the ECS task role can write only under `products/`. Set `product_image_upload_allowed_user_ids` in the untracked `terraform/terraform.tfvars` to the UUIDs of existing accounts allowed to upload or replace product images. A user's UUID is returned by `GET /api/v1/auth/me`. An empty list denies all uploads. The API accepts JPEG, PNG, and WebP files up to 5 MiB and saves the CloudFront URL in the selected product's `image_url` field.
 
 ## Tests and formatting
 
@@ -110,6 +110,8 @@ The image runs as a non-root user and contains the API and migrations, not the t
 Pushing to `main` builds an image tagged with the commit SHA, runs `alembic upgrade head` as a one-off ECS task, and updates the ECS service only after the migration task exits successfully. Keep migrations backward-compatible with the currently running application version; use an expand-and-contract sequence for changes that remove or rename existing columns.
 
 The callback contact directory is read-only through the API. Its initial entries are inserted by the Alembic migration; maintain the directory through a reviewed database migration rather than a public write endpoint.
+
+For image uploads, Terraform provisions a private S3 bucket, an OAC-protected CloudFront distribution, and a least-privilege ECS task role. Apply Terraform before using the image upload endpoint; CloudFront deployment may take several minutes.
 
 ## Project layout
 

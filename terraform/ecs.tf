@@ -64,6 +64,7 @@ resource "aws_ecs_task_definition" "app" {
   cpu                      = var.ecs_cpu
   memory                   = var.ecs_memory
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
 
   container_definitions = jsonencode([{
     name         = "bmw-catalog"
@@ -76,7 +77,10 @@ resource "aws_ecs_task_definition" "app" {
       { name = "POSTGRES_DB", value = aws_db_instance.main.db_name },
       { name = "POSTGRES_HOST", value = aws_db_instance.main.address },
       { name = "POSTGRES_PORT", value = "5432" },
-      { name = "AWS_REGION", value = var.aws_region }
+      { name = "AWS_REGION", value = var.aws_region },
+      { name = "AWS_BUCKET_NAME", value = aws_s3_bucket.product_images.id },
+      { name = "AWS_CLOUDFRONT_DOMAIN", value = aws_cloudfront_distribution.product_images.domain_name },
+      { name = "PRODUCT_IMAGE_UPLOAD_ALLOWED_USER_IDS", value = jsonencode(var.product_image_upload_allowed_user_ids) }
     ]
     secrets = [
       { name = "SECRET_KEY", valueFrom = aws_secretsmanager_secret.app_secret_key.arn },
