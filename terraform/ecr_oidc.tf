@@ -28,7 +28,7 @@ resource "aws_iam_role" "github_actions" {
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com" }
-        StringLike   = { "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:*" }
+        StringLike   = { "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:ref:refs/heads/main" }
       }
     }]
   })
@@ -53,7 +53,7 @@ resource "aws_iam_role_policy" "github_deploy" {
       },
       {
         Effect   = "Allow"
-        Action   = ["ecs:DescribeServices", "ecs:DescribeTaskDefinition", "ecs:UpdateService", "ecs:RegisterTaskDefinition"]
+        Action   = ["ecs:DescribeServices", "ecs:DescribeTasks", "ecs:DescribeTaskDefinition", "ecs:RunTask", "ecs:UpdateService", "ecs:RegisterTaskDefinition"]
         Resource = "*"
       },
       {
