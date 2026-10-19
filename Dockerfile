@@ -17,7 +17,7 @@ COPY app ./app
 COPY migrations ./migrations
 COPY alembic.ini ./alembic.ini
 
-RUN useradd --system --create-home appuser
+RUN useradd --system --no-create-home --shell /usr/sbin/nologin appuser
 USER appuser
 
 EXPOSE 8000
