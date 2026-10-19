@@ -2,6 +2,12 @@
 
 FastAPI service for the BMW vehicle catalog. It provides product and category data, customer accounts, authentication, carts, favorites, reviews, orders, and callback requests. Product images are uploaded to Amazon S3; the API stores the resulting URL with the product.
 
+## Deployed application
+
+- Application: http://bmw-cat-dev-1292959207.eu-central-1.elb.amazonaws.com
+- API documentation (Swagger UI): http://bmw-cat-dev-1292959207.eu-central-1.elb.amazonaws.com/docs
+- OpenAPI schema: http://bmw-cat-dev-1292959207.eu-central-1.elb.amazonaws.com/api/v1/openapi.json
+
 ## Requirements
 
 - Python 3.12 or newer
