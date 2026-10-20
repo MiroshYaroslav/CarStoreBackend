@@ -10,7 +10,13 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15, gt=0)
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=30, gt=0)
-    CORS_ORIGINS: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    CORS_ORIGINS: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:5173",
+            "https://auto-catalog.app",
+            "https://auto-catalog-blue.vercel.app",
+        ]
+    )
 
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
