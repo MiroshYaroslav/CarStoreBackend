@@ -77,6 +77,7 @@ resource "aws_ecs_task_definition" "app" {
       { name = "POSTGRES_DB", value = aws_db_instance.main.db_name },
       { name = "POSTGRES_HOST", value = aws_db_instance.main.address },
       { name = "POSTGRES_PORT", value = "5432" },
+      { name = "CORS_ORIGINS", value = jsonencode(["https://auto-catalog.app", "https://auto-catalog-blue.vercel.app"]) },
       { name = "AWS_REGION", value = var.aws_region },
       { name = "AWS_BUCKET_NAME", value = aws_s3_bucket.product_images.id },
       { name = "AWS_CLOUDFRONT_DOMAIN", value = aws_cloudfront_distribution.product_images.domain_name },
