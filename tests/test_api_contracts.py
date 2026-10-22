@@ -6,9 +6,12 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.api.dependencies import get_user_repository
 from app.api.v1.endpoints import auth as auth_endpoints
 from app.api.v1.endpoints.auth import get_session_service, get_user_service
 from app.api.v1.endpoints.products import get_product_service, get_s3_service
+from app.core.config import settings
+from app.core.security import create_access_token
 from app.main import app
 
 
@@ -154,18 +157,24 @@ async def test_list_products_returns_product_payload(client, product):
 
 
 @pytest.mark.asyncio
-async def test_product_image_upload_persists_s3_url(client, product):
+async def test_product_image_upload_persists_s3_url(client, product, user, monkeypatch):
     image_url = "https://catalog.s3.eu-central-1.amazonaws.com/products/test.jpg"
     service = SimpleNamespace(
-        update_product_image=AsyncMock(return_value={**product, "image_url": image_url})
+        get_product_or_404=AsyncMock(return_value=product),
+        update_product_image=AsyncMock(return_value={**product, "image_url": image_url}),
     )
     s3_service = SimpleNamespace(upload_image=AsyncMock(return_value=image_url))
     app.dependency_overrides[get_product_service] = lambda: service
     app.dependency_overrides[get_s3_service] = lambda: s3_service
+    app.dependency_overrides[get_user_repository] = lambda: SimpleNamespace(
+        get=AsyncMock(return_value=user)
+    )
+    monkeypatch.setattr(settings, "PRODUCT_IMAGE_UPLOAD_ALLOWED_USER_IDS", [str(user.id)])
 
     response = await client.post(
         f"/api/v1/products/{product['id']}/image",
         files={"file": ("bmw.jpg", b"image-bytes", "image/jpeg")},
+        headers={"Authorization": f"Bearer {create_access_token(user.id)}"},
     )
 
     assert response.status_code == 200

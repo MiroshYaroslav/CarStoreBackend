@@ -61,9 +61,15 @@ class CartService(BaseService):
     async def get_cart(self, user_id: uuid.UUID | None = None, session_id: str | None = None):
         return await self._repository.get_cart(user_id=user_id, session_id=session_id)
 
-    async def remove_item(self, item_id: uuid.UUID) -> None:
+    async def remove_item(
+        self, item_id: uuid.UUID, user_id: uuid.UUID | None = None, session_id: str | None = None
+    ) -> None:
+        if not user_id and not session_id:
+            raise HTTPException(
+                status_code=400, detail="Must provide either auth token or session_id"
+            )
         try:
-            if not await self._repository.get(item_id):
+            if not await self._repository.get_owned_item(item_id, user_id, session_id):
                 raise NotFoundException("Cart item not found")
             await self._repository.delete(item_id)
             await self._session.commit()

@@ -14,9 +14,7 @@ def get_callback_contact_repo(session: DBSession) -> CallbackContactRepository:
     return CallbackContactRepository(session)
 
 
-CallbackContactRepoDep = Annotated[
-    CallbackContactRepository, Depends(get_callback_contact_repo)
-]
+CallbackContactRepoDep = Annotated[CallbackContactRepository, Depends(get_callback_contact_repo)]
 
 
 def get_callback_contact_service(
@@ -25,9 +23,7 @@ def get_callback_contact_service(
     return CallbackContactService(session, repo)
 
 
-CallbackContactServiceDep = Annotated[
-    CallbackContactService, Depends(get_callback_contact_service)
-]
+CallbackContactServiceDep = Annotated[CallbackContactService, Depends(get_callback_contact_service)]
 
 
 @router.get("/", response_model=list[CallbackContactRead])

@@ -71,3 +71,16 @@ class CartRepository(BaseRepository[CartItem]):
         )
         result = await self._require_session().execute(query)
         return result.scalars().first()
+
+    async def get_owned_item(
+        self, item_id: uuid.UUID, user_id: uuid.UUID | None, session_id: str | None
+    ) -> CartItem | None:
+        query = select(CartItem).where(CartItem.id == item_id)
+        if user_id:
+            query = query.where(CartItem.user_id == user_id)
+        elif session_id:
+            query = query.where(CartItem.session_id == session_id)
+        else:
+            return None
+        result = await self._require_session().execute(query)
+        return result.scalars().first()

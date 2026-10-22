@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.dependencies import CurrentUser, DBSession
+from app.api.dependencies import CatalogAdmin, DBSession
 from app.repositories.callback_request_repository import CallbackRequestRepository
 from app.schemas.callback_request import (
     CallbackRequestCreate,
@@ -37,7 +37,7 @@ async def create_request(request_in: CallbackRequestCreate, service: CallbackReq
 
 
 @router.get("/", response_model=list[CallbackRequestRead])
-async def get_requests(_: CurrentUser, service: CallbackRequestServiceDep):
+async def get_requests(_: CatalogAdmin, service: CallbackRequestServiceDep):
     return await service.list_requests()
 
 
@@ -45,7 +45,7 @@ async def get_requests(_: CurrentUser, service: CallbackRequestServiceDep):
 async def update_request_status(
     request_id: uuid.UUID,
     update_in: CallbackRequestUpdate,
-    _: CurrentUser,
+    _: CatalogAdmin,
     service: CallbackRequestServiceDep,
 ):
     return await service.update_status(request_id, update_in)

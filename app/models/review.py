@@ -25,6 +25,10 @@ class Review(BaseDB):
         ForeignKey("product.id", ondelete="CASCADE"), index=True
     )
 
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
     username: Mapped[str] = mapped_column(String(100))
 
     rating: Mapped[int] = mapped_column(SmallInteger)

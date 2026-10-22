@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
-from app.api.dependencies import CurrentUser, DBSession
+from app.api.dependencies import CatalogAdmin, CurrentUser, DBSession
 from app.core.config import settings
 from app.models.user import User
 from app.repositories.product_repository import (
@@ -117,25 +117,27 @@ async def get_product(product_id: uuid.UUID, service: ProductServiceDep):
     "/{product_id}/engines", response_model=EngineRead, status_code=status.HTTP_201_CREATED
 )
 async def create_product_engine(
-    product_id: uuid.UUID, engine: EngineCreate, service: ProductServiceDep
+    product_id: uuid.UUID, engine: EngineCreate, service: ProductServiceDep, _: CatalogAdmin
 ):
     return await service.add_engine(product_id, engine)
 
 
 @router.post("/{product_id}/colors", response_model=ColorRead, status_code=status.HTTP_201_CREATED)
 async def create_product_color(
-    product_id: uuid.UUID, color: ColorCreate, service: ProductServiceDep
+    product_id: uuid.UUID, color: ColorCreate, service: ProductServiceDep, _: CatalogAdmin
 ):
     return await service.add_color(product_id, color)
 
 
 @router.post("/{product_id}/trims", response_model=TrimRead, status_code=status.HTTP_201_CREATED)
-async def create_product_trim(product_id: uuid.UUID, trim: TrimCreate, service: ProductServiceDep):
+async def create_product_trim(
+    product_id: uuid.UUID, trim: TrimCreate, service: ProductServiceDep, _: CatalogAdmin
+):
     return await service.add_trim(product_id, trim)
 
 
 @router.delete("/{product_id}")
-async def soft_delete_product(product_id: uuid.UUID, service: ProductServiceDep):
+async def soft_delete_product(product_id: uuid.UUID, service: ProductServiceDep, _: CatalogAdmin):
     await service.soft_delete(product_id)
     return {"status": "ok", "message": f"Product {product_id} deactivated successfully"}
 

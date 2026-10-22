@@ -15,3 +15,8 @@ class ReviewRepository(BaseRepository[Review]):
         )
         result = await self._require_session().execute(query)
         return result.scalars().all()
+
+    async def get_owned_review(self, review_id: uuid.UUID, user_id: uuid.UUID):
+        query = select(Review).where(Review.id == review_id, Review.user_id == user_id)
+        result = await self._require_session().execute(query)
+        return result.scalars().first()

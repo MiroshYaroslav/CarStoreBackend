@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.dependencies import DBSession
+from app.api.dependencies import CatalogAdmin, DBSession
 from app.repositories.category_repository import CategoryRepository
 from app.schemas.category import CategoryCreate, CategoryRead, CategoryUpdate
 from app.services.category_service import CategoryService
@@ -31,20 +31,23 @@ async def read_categories(service: CategoryServiceDep):
 
 
 @router.post("/", response_model=CategoryRead, status_code=status.HTTP_201_CREATED)
-async def create_category(category: CategoryCreate, service: CategoryServiceDep):
+async def create_category(category: CategoryCreate, service: CategoryServiceDep, _: CatalogAdmin):
     return await service.create_category(category)
 
 
 @router.patch("/{category_id}", response_model=CategoryRead)
 async def update_category(
-    category_id: uuid.UUID, category: CategoryUpdate, service: CategoryServiceDep
+    category_id: uuid.UUID, category: CategoryUpdate, service: CategoryServiceDep, _: CatalogAdmin
 ):
     return await service.update_category(category_id, category)
 
 
 @router.delete("/{category_id}")
 async def delete_category(
-    category_id: uuid.UUID, service: CategoryServiceDep, hard_delete: bool = False
+    category_id: uuid.UUID,
+    service: CategoryServiceDep,
+    _: CatalogAdmin,
+    hard_delete: bool = False,
 ):
     await service.delete_category(category_id, hard_delete)
     return {

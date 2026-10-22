@@ -1,9 +1,16 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.dependencies import CurrentUser, DBSession, get_auth_service, get_user_repository
+from app.api.dependencies import (
+    CatalogAdmin,
+    CurrentUser,
+    DBSession,
+    get_auth_service,
+    get_user_repository,
+    is_catalog_admin,
+)
 from app.repositories.user_repository import UserRepository
 from app.schemas.user import UserRead, UserUpdate
 from app.services.auth_service import AuthService
@@ -27,7 +34,7 @@ UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 @router.get("/", response_model=list[UserRead])
 async def list_users(
     service: UserServiceDep,
-    current_user: CurrentUser,
+    _: CatalogAdmin,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=1000),
 ) -> list[UserRead]:
@@ -36,6 +43,8 @@ async def list_users(
 
 @router.get("/{user_id}", response_model=UserRead)
 async def get_user(user_id: uuid.UUID, service: UserServiceDep, current_user: CurrentUser):
+    if current_user.id != user_id and not is_catalog_admin(current_user):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return await service.get_user(user_id)
 
 
@@ -43,9 +52,13 @@ async def get_user(user_id: uuid.UUID, service: UserServiceDep, current_user: Cu
 async def update_user(
     user_id: uuid.UUID, payload: UserUpdate, service: UserServiceDep, current_user: CurrentUser
 ):
+    if current_user.id != user_id and not is_catalog_admin(current_user):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return await service.update_user(user_id, payload)
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(user_id: uuid.UUID, service: UserServiceDep, current_user: CurrentUser):
+    if current_user.id != user_id and not is_catalog_admin(current_user):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     await service.delete_user(user_id)
