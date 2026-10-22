@@ -1,8 +1,8 @@
 """SQLAlchemy model package and metadata registry imports."""
 
 from app.models.base import BaseDB
-from app.models.callback_request import CallbackRequest
 from app.models.callback_contact import CallbackContact
+from app.models.callback_request import CallbackRequest
 from app.models.cart import CartItem
 from app.models.category import Category
 from app.models.favorite import Favorite

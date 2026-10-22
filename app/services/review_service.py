@@ -24,19 +24,23 @@ class ReviewService(BaseService):
             else await self._repository.get_many()
         )
 
-    async def create_review(self, review_in: ReviewCreate):
+    async def create_review(self, review_in: ReviewCreate, user_id: uuid.UUID):
         if not await self._products.get_with_relations(review_in.product_id):
             raise NotFoundException("Product not found")
         try:
-            result = await self._repository.create(review_in.model_dump())
+            result = await self._repository.create({**review_in.model_dump(), "user_id": user_id})
             await self._session.commit()
             return result
         except IntegrityError:
             await self._session.rollback()
             raise ConflictException("Review conflicts with existing data")
 
-    async def update_review(self, review_id: uuid.UUID, update_in: ReviewUpdate):
+    async def update_review(
+        self, review_id: uuid.UUID, user_id: uuid.UUID, update_in: ReviewUpdate
+    ):
         try:
+            if not await self._repository.get_owned_review(review_id, user_id):
+                raise NotFoundException("Review not found")
             result = await self._repository.update(
                 review_id, update_in.model_dump(exclude_unset=True)
             )
@@ -48,8 +52,10 @@ class ReviewService(BaseService):
             await self._session.rollback()
             raise ConflictException("Review conflicts with existing data")
 
-    async def delete_review(self, review_id: uuid.UUID):
+    async def delete_review(self, review_id: uuid.UUID, user_id: uuid.UUID):
         try:
+            if not await self._repository.get_owned_review(review_id, user_id):
+                raise NotFoundException("Review not found")
             if not await self._repository.delete(review_id):
                 raise NotFoundException("Review not found")
             await self._session.commit()

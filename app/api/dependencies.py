@@ -7,6 +7,7 @@ from jwt.exceptions import InvalidTokenError
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import AsyncSessionMaker
 from app.core.security import decode_access_token
 from app.models.user import User
@@ -73,3 +74,23 @@ async def get_optional_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def is_catalog_admin(user: User) -> bool:
+    allowed_user_ids = {
+        user_id.strip().casefold()
+        for user_id in settings.PRODUCT_IMAGE_UPLOAD_ALLOWED_USER_IDS
+        if user_id.strip()
+    }
+    return str(user.id).casefold() in allowed_user_ids
+
+
+async def require_catalog_admin(user: CurrentUser) -> User:
+    if not is_catalog_admin(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Catalog administrator required"
+        )
+    return user
+
+
+CatalogAdmin = Annotated[User, Depends(require_catalog_admin)]

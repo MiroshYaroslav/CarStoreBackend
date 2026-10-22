@@ -51,6 +51,13 @@ async def add_to_cart(
 
 
 @router.delete("/{item_id}")
-async def remove_from_cart(item_id: uuid.UUID, service: CartServiceDep):
-    await service.remove_item(item_id)
+async def remove_from_cart(
+    item_id: uuid.UUID,
+    service: CartServiceDep,
+    user: User | None = Depends(get_optional_user),
+    session_id: str | None = Query(None),
+):
+    await service.remove_item(
+        item_id, user_id=user.id if user else None, session_id=session_id if not user else None
+    )
     return {"status": "ok", "message": "Item removed from cart"}
