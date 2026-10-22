@@ -1,4 +1,5 @@
 data "aws_acm_certificate" "app_cert" {
+  # This issued certificate must include api.auto-catalog.app as a SAN.
   domain      = "auto-catalog.app"
   statuses    = ["ISSUED"]
   most_recent = true
@@ -42,6 +43,7 @@ resource "aws_lb_listener" "http" {
     type = "redirect"
 
     redirect {
+      host        = "api.auto-catalog.app"
       port        = "443"
       protocol    = "HTTPS"
       status_code = "HTTP_301"
