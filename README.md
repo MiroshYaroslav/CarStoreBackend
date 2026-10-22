@@ -4,9 +4,13 @@ FastAPI service for the BMW vehicle catalog. It provides product and category da
 
 ## Deployed application
 
-- Application: http://bmw-cat-dev-1292959207.eu-central-1.elb.amazonaws.com
-- API documentation (Swagger UI): http://bmw-cat-dev-1292959207.eu-central-1.elb.amazonaws.com/docs
-- OpenAPI schema: http://bmw-cat-dev-1292959207.eu-central-1.elb.amazonaws.com/api/v1/openapi.json
+- Frontend website: <https://auto-catalog.app/>
+- Backend API: <https://api.auto-catalog.app/>
+- API documentation (Swagger UI): <https://api.auto-catalog.app/docs>
+- OpenAPI schema: <https://api.auto-catalog.app/api/v1/openapi.json>
+- Legacy AWS load balancer URL: <http://bmw-cat-dev-1292959207.eu-central-1.elb.amazonaws.com> (redirects to the API HTTPS address above)
+
+The ACM certificate attached to the load balancer must cover `api.auto-catalog.app`. The DNS record for `api.auto-catalog.app` must point to the Terraform-created load balancer.
 
 ## Requirements
 
@@ -70,14 +74,16 @@ The login endpoint accepts OAuth2 form fields (`username` and `password`) at `PO
 
 ## Product images
 
-Upload an image with `POST /api/v1/products/{product_id}/image` as multipart form data using the `file` field and a Bearer access token. For AWS, the Terraform-created S3 bucket remains private; CloudFront serves images through Origin Access Control, while the ECS task role can write only under `products/`. Set `product_image_upload_allowed_user_ids` in the untracked `terraform/terraform.tfvars` to the UUIDs of existing accounts allowed to upload or replace product images. A user's UUID is returned by `GET /api/v1/auth/me`. An empty list denies all uploads. The API accepts JPEG, PNG, and WebP files up to 5 MiB and saves the CloudFront URL in the selected product's `image_url` field.
+Upload an image with `POST /api/v1/products/{product_id}/image` as multipart form data using the `file` field and a Bearer access token. For AWS, the Terraform-created S3 bucket remains private; CloudFront serves images through Origin Access Control, while the ECS task role can write only under `products/`. Set `product_image_upload_allowed_user_ids` in the untracked `terraform/terraform.tfvars` to the UUIDs of existing catalog administrators. The same allowlist authorizes image uploads, catalog changes (categories and product options), and administration of users and callback requests. A user's UUID is returned by `GET /api/v1/auth/me`. An empty list denies these administrative actions and all image uploads. The API accepts JPEG, PNG, and WebP files up to 5 MiB and saves the CloudFront URL in the selected product's `image_url` field.
+
+Users can create, update, or delete only their own reviews. Favorites and order history are scoped to the authenticated user. Cart operations use either the authenticated user's cart or a guest `session_id`; guest clients must send that same `session_id` when deleting an item (`DELETE /api/v1/cart/{item_id}?session_id=...`).
 
 ## Tests and formatting
 
 Run the tests with:
 
 ```powershell
-uv run pytest
+uv run python -m pytest
 ```
 
 Format Python files and sort imports with Ruff:
@@ -96,14 +102,16 @@ uv run ruff check app migrations tests
 
 ## Docker
 
-Build and run the API image from the project root:
+Start the API and PostgreSQL locally from the project root:
 
 ```powershell
-docker build -t bmw-catalog-api .
-docker run --rm -p 8000:8000 --env-file .env bmw-catalog-api
+Copy-Item .env.example .env  # only needed the first time
+docker compose up --build
 ```
 
-The image runs as a non-root user and contains the API and migrations, not the test suite or local environment file. Pass configuration at runtime. In ECS, set the required application variables in the task definition and use a task role for AWS access.
+Compose waits for PostgreSQL to become healthy, applies Alembic migrations, and then starts the API. Open `http://127.0.0.1:8000/docs` for Swagger UI. Stop the stack with `docker compose down`; the named PostgreSQL volume is retained. To remove the local database data too, run `docker compose down --volumes`.
+
+The image runs as a non-root user and contains the API and migrations, not the test suite or local environment file. In ECS, configuration is supplied through the task definition and Secrets Manager, and AWS access uses the task role.
 
 ## AWS deployment
 
@@ -131,6 +139,9 @@ tests/                 API contract tests
 pyproject.toml         Runtime and development dependencies
 uv.lock                Resolved dependency versions
 Dockerfile             Production container image
+compose.yaml           Local API and PostgreSQL stack
+terraform/             AWS infrastructure as code
+.github/workflows/      GitHub Actions deployment workflow
 ```
 
 When changing a model, create and review a migration before applying it:
