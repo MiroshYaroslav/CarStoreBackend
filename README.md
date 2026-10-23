@@ -1,6 +1,6 @@
 # BMW Catalog API
 
-FastAPI service for the BMW vehicle catalog. It provides product and category data, customer accounts, authentication, carts, favorites, reviews, orders, and callback requests. Product images are uploaded to Amazon S3; the API stores the resulting URL with the product.
+FastAPI service for the BMW vehicle catalog. provides product and category data, customer accounts, authentication, carts, favorites, reviews, orders, and callback requests. Product images are uploaded to Amazon S3; the API stores the resulting URL with the product.
 
 ## Deployed application
 
