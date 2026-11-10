@@ -2,7 +2,7 @@ import uuid
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status, Request
 
 from app.api.dependencies import CatalogAdmin, CurrentUser, DBSession
 from app.core.config import settings
@@ -76,14 +76,21 @@ TrimRepoDep = Annotated[TrimRepository, Depends(get_trim_repo)]
 
 
 def get_product_service(
+    request: Request,
     session: DBSession,
     products: ProductRepoDep,
     engines: EngineRepoDep,
     colors: ColorRepoDep,
     trims: TrimRepoDep,
 ) -> ProductService:
-    return ProductService(session, products, engines, colors, trims)
-
+    return ProductService(
+        session,
+        products,
+        engines,
+        colors,
+        trims,
+        redis=request.app.state.redis
+    )
 
 ProductServiceDep = Annotated[ProductService, Depends(get_product_service)]
 
