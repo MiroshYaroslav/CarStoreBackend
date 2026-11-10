@@ -6,6 +6,7 @@ from fastapi.exceptions import RequestValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.cors import CORSMiddleware
+from redis.asyncio import Redis
 
 from app.api.router import router as api_router
 from app.core.config import settings
@@ -32,9 +33,15 @@ async def lifespan(app: FastAPI):
         logger.exception("Database connection failed: %s", db_err)
         raise
 
+    app.state.redis = Redis.from_url(
+        settings.REDIS_URL,
+        decode_responses=True,
+    )
+
     try:
         yield
     finally:
+        await app.state.redis.aclose()
         await engine.dispose()
         logger.info("Application shutdown complete.")
 
