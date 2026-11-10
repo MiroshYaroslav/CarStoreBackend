@@ -66,36 +66,53 @@ resource "aws_ecs_task_definition" "app" {
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
-  container_definitions = jsonencode([{
-    name         = "bmw-catalog"
-    image        = "${aws_ecr_repository.app.repository_url}:${var.app_image_tag}"
-    essential    = true
-    portMappings = [{ containerPort = 8000, hostPort = 8000, protocol = "tcp" }]
-    environment = [
-      { name = "ENVIRONMENT", value = var.environment },
-      { name = "POSTGRES_USER", value = var.db_username },
-      { name = "POSTGRES_DB", value = aws_db_instance.main.db_name },
-      { name = "POSTGRES_HOST", value = aws_db_instance.main.address },
-      { name = "POSTGRES_PORT", value = "5432" },
-      { name = "CORS_ORIGINS", value = jsonencode(["https://auto-catalog.app", "https://auto-catalog-blue.vercel.app"]) },
-      { name = "AWS_REGION", value = var.aws_region },
-      { name = "AWS_BUCKET_NAME", value = aws_s3_bucket.product_images.id },
-      { name = "AWS_CLOUDFRONT_DOMAIN", value = aws_cloudfront_distribution.product_images.domain_name },
-      { name = "PRODUCT_IMAGE_UPLOAD_ALLOWED_USER_IDS", value = jsonencode(var.product_image_upload_allowed_user_ids) }
-    ]
-    secrets = [
-      { name = "SECRET_KEY", valueFrom = aws_secretsmanager_secret.app_secret_key.arn },
-      { name = "POSTGRES_PASSWORD", valueFrom = aws_secretsmanager_secret.db_password.arn }
-    ]
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        "awslogs-group"         = aws_cloudwatch_log_group.app.name
-        "awslogs-region"        = var.aws_region
-        "awslogs-stream-prefix" = "ecs"
+  container_definitions = jsonencode([
+    {
+      name         = "bmw-catalog"
+      image        = "${aws_ecr_repository.app.repository_url}:${var.app_image_tag}"
+      essential    = true
+      portMappings = [{ containerPort = 8000, hostPort = 8000, protocol = "tcp" }]
+      environment = [
+        { name = "ENVIRONMENT", value = var.environment },
+        { name = "POSTGRES_USER", value = var.db_username },
+        { name = "POSTGRES_DB", value = aws_db_instance.main.db_name },
+        { name = "POSTGRES_HOST", value = aws_db_instance.main.address },
+        { name = "POSTGRES_PORT", value = "5432" },
+        { name = "REDIS_URL", value = "redis://127.0.0.1:6379" },
+        { name = "CORS_ORIGINS", value = jsonencode(["https://auto-catalog.app", "https://auto-catalog-blue.vercel.app"]) },
+        { name = "AWS_REGION", value = var.aws_region },
+        { name = "AWS_BUCKET_NAME", value = aws_s3_bucket.product_images.id },
+        { name = "AWS_CLOUDFRONT_DOMAIN", value = aws_cloudfront_distribution.product_images.domain_name },
+        { name = "PRODUCT_IMAGE_UPLOAD_ALLOWED_USER_IDS", value = jsonencode(var.product_image_upload_allowed_user_ids) }
+      ]
+      secrets = [
+        { name = "SECRET_KEY", valueFrom = aws_secretsmanager_secret.app_secret_key.arn },
+        { name = "POSTGRES_PASSWORD", valueFrom = aws_secretsmanager_secret.db_password.arn }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.app.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
+    },
+    {
+      name      = "redis-cache"
+      image     = "redis:7-alpine"
+      essential = true
+      portMappings = [{ containerPort = 6379, hostPort = 6379, protocol = "tcp" }]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.app.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "redis"
+        }
       }
     }
-  }])
+  ])
   depends_on = [
     aws_iam_role_policy_attachment.ecs_task_execution,
     aws_iam_role_policy.ecs_read_app_secrets
@@ -116,7 +133,7 @@ resource "aws_ecs_service" "app" {
   name            = "${local.name}-service"
   cluster         = aws_ecs_cluster.main.id
   task_definition = data.aws_ecs_task_definition.active.arn
-  desired_count   = var.ecs_desired_count
+  desired_count   = var.ecs_min_capacity
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -131,10 +148,40 @@ resource "aws_ecs_service" "app" {
   }
   depends_on = [aws_lb_listener.http, aws_nat_gateway.main]
   tags       = { Name = "${local.name}-service" }
+
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
 }
 
 resource "aws_cloudwatch_log_group" "app" {
   name              = "/ecs/${local.name}"
   retention_in_days = 30
   tags              = { Name = "${local.name}-logs" }
+}
+
+resource "aws_appautoscaling_target" "ecs_target" {
+  max_capacity       = var.ecs_max_capacity
+  min_capacity       = var.ecs_min_capacity
+  resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.app.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "ecs_cpu_policy" {
+  name               = "${local.name}-cpu-autoscaling"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.ecs_target.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs_target.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs_target.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    target_value       = 60.0
+    scale_in_cooldown  = 300
+    scale_out_cooldown = 60
+
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+  }
 }
