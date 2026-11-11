@@ -51,7 +51,7 @@ class ProductService(BaseService):
         try:
             cached_data = await self._redis.get(cache_key)
             if cached_data is not None:
-                return [Product(**item) for item in json.loads(cached_data)]  # Віддаємо кеш
+                return [ProductRead.model_validate(item) for item in json.loads(cached_data)]
         except RedisError:
             pass
 
@@ -68,13 +68,13 @@ class ProductService(BaseService):
 
         return products
 
-    async def get_product_or_404(self, product_id: uuid.UUID) -> Product:
+    async def get_product_or_404(self, product_id: uuid.UUID) -> Product | ProductRead:
         cache_key = f"catalog:product:{product_id}"
 
         try:
             cached_data = await self._redis.get(cache_key)
             if cached_data is not None:
-                return Product(**json.loads(cached_data))
+                return ProductRead.model_validate(json.loads(cached_data))
         except RedisError:
             pass
 
