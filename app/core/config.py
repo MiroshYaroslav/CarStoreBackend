@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: str = "5432"
     REDIS_URL: str = "redis://localhost:6379/0"
+    CACHE_ENABLED: bool = True
 
     AWS_BUCKET_NAME: str | None = None
     AWS_REGION: str | None = None

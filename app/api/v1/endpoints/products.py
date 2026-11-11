@@ -2,7 +2,7 @@ import uuid
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 
 from app.api.dependencies import CatalogAdmin, CurrentUser, DBSession
 from app.core.config import settings
@@ -89,8 +89,10 @@ def get_product_service(
         engines,
         colors,
         trims,
-        redis=request.app.state.redis
+        redis=request.app.state.redis,
+        cache_enabled=settings.CACHE_ENABLED,
     )
+
 
 ProductServiceDep = Annotated[ProductService, Depends(get_product_service)]
 

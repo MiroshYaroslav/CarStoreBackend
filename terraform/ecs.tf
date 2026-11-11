@@ -79,6 +79,7 @@ resource "aws_ecs_task_definition" "app" {
         { name = "POSTGRES_HOST", value = aws_db_instance.main.address },
         { name = "POSTGRES_PORT", value = "5432" },
         { name = "REDIS_URL", value = "redis://127.0.0.1:6379" },
+        { name = "CACHE_ENABLED", value = tostring(var.cache_enabled) },
         { name = "CORS_ORIGINS", value = jsonencode(["https://auto-catalog.app", "https://auto-catalog-blue.vercel.app"]) },
         { name = "AWS_REGION", value = var.aws_region },
         { name = "AWS_BUCKET_NAME", value = aws_s3_bucket.product_images.id },
@@ -99,9 +100,9 @@ resource "aws_ecs_task_definition" "app" {
       }
     },
     {
-      name      = "redis-cache"
-      image     = "redis:7-alpine"
-      essential = true
+      name         = "redis-cache"
+      image        = "redis:7-alpine"
+      essential    = true
       portMappings = [{ containerPort = 6379, hostPort = 6379, protocol = "tcp" }]
       logConfiguration = {
         logDriver = "awslogs"

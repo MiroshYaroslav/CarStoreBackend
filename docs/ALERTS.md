@@ -1,22 +1,13 @@
-# Alerts
+# Сповіщення
 
-Terraform creates an SNS topic `<environment-name>-alerts` and subscribes
-`alert_email` by email. AWS sends a confirmation message to that address; the
-subscription remains pending until its confirmation link is opened.
+Terraform створює SNS topic і email-підписку. Після `terraform apply` потрібно один раз відкрити AWS confirmation email для SNS; доки subscription має стан `PendingConfirmation`, сповіщення не доставляються.
 
-The current CloudWatch alarm is `<environment-name>-target-5xx`: it triggers
-when the ALB target group reports more than zero 5XX responses in each of two
-consecutive one-minute periods. It publishes both ALARM and OK state changes to
-SNS. This is a 5XX alarm, not a CPU-above-70% alarm. CPU is used by ECS target
-tracking at a 60% target; Terraform does not define a separate CPU email alarm.
+## Умови
 
-Capture and attach the AWS alarm email and recovery email after a real alarm
-cycle. Record timestamps for first threshold breach, ALARM state, email arrival,
-recovery, and OK email to estimate detection and notification latency. Do not
-include email addresses, confirmation URLs, or other account secrets in shared
-screenshots.
+Основне навчальне сповіщення: ECS service `CPUUtilization` понад **70%** у кожному з **двох послідовних 60-секундних періодів**. Поріг вищий за autoscaling target 60%, щоб email означав суттєве навантаження, а не кожне звичайне масштабування. SNS надсилає лист при переході до ALARM і при поверненні до OK. Додатково лишається 5xx alarm, який спрацьовує при ненульових target 5xx у двох послідовних хвилинах.
 
-## Evidence and response time
+## Фіксація фактичної реакції
 
-Pending infrastructure apply, SNS confirmation, and an observed alarm/recovery
-cycle. No screenshots or measured reaction times are available yet.
+Після apply і підтвердження SNS підберіть навантаження, яке утримує CPU вище 70% щонайменше дві хвилини, але не довше за ліміт 10–15 хвилин. Збережіть знімки ALARM email і OK email, приховавши адресу одержувача та посилання. Запишіть часові мітки початку плато, першого datapoint вище порогу, переходу alarm state, прибуття листа, повернення метрики до норми й OK email. Час реакції від початку плато до листа включає періоди CloudWatch, evaluation window, доставку SNS та поштового сервера.
+
+Статус: правило описане в Terraform. Знімки листів і виміряний час реакції потрібно додати після реального циклу ALARM → OK. У попередньому прогоні є один 502, але 5xx alarm вимагає двох хвилин поспіль, отже цей одиничний збій сам по собі його не активує.

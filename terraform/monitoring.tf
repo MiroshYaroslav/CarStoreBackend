@@ -29,6 +29,26 @@ resource "aws_cloudwatch_metric_alarm" "target_5xx" {
   ok_actions    = [aws_sns_topic.alerts.arn]
 }
 
+resource "aws_cloudwatch_metric_alarm" "high_cpu" {
+  alarm_name          = "${local.name}-high-cpu"
+  alarm_description   = "ECS service average CPU utilization exceeded 70% for two consecutive one-minute periods."
+  namespace           = "AWS/ECS"
+  metric_name         = "CPUUtilization"
+  statistic           = "Average"
+  period              = 60
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  threshold           = 70
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  dimensions = {
+    ClusterName = aws_ecs_cluster.main.name
+    ServiceName = aws_ecs_service.app.name
+  }
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
 resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "${local.name}-dashboard"
   dashboard_body = jsonencode({
@@ -52,9 +72,12 @@ resource "aws_cloudwatch_dashboard" "main" {
       {
         type = "metric", x = 0, y = 6, width = 12, height = 6,
         properties = {
-          title   = "ECS Service CPU Utilization"
-          view    = "timeSeries", region = var.aws_region, period = 60,
-          metrics = [["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.app.name, { stat = "Average" }]]
+          title = "ECS Service Desired and Running Tasks"
+          view  = "timeSeries", region = var.aws_region, period = 60,
+          metrics = [
+            ["ECS/ContainerInsights", "DesiredTaskCount", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.app.name, { stat = "Average", label = "Desired tasks" }],
+            ["ECS/ContainerInsights", "RunningTaskCount", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.app.name, { stat = "Average", label = "Running tasks" }]
+          ]
         }
       },
       {
@@ -68,9 +91,9 @@ resource "aws_cloudwatch_dashboard" "main" {
       {
         type = "metric", x = 0, y = 12, width = 12, height = 6,
         properties = {
-          title   = "ECS Service Memory Utilization"
+          title   = "ECS Service CPU Utilization (scale target 60%, alert 70%)"
           view    = "timeSeries", region = var.aws_region, period = 60,
-          metrics = [["AWS/ECS", "MemoryUtilization", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.app.name, { stat = "Average" }]]
+          metrics = [["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.app.name, { stat = "Average" }]]
         }
       }
     ]
