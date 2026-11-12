@@ -102,6 +102,7 @@ resource "aws_ecs_task_definition" "app" {
     {
       name         = "redis-cache"
       image        = "redis:7-alpine"
+      command      = ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
       essential    = true
       portMappings = [{ containerPort = 6379, hostPort = 6379, protocol = "tcp" }]
       logConfiguration = {
