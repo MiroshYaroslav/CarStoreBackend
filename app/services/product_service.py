@@ -1,8 +1,12 @@
+import asyncio
 import hashlib
 import json
+import logging
 import uuid
+from typing import Any
 
 from fastapi import HTTPException, Response
+from fastapi.encoders import jsonable_encoder
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 from sqlalchemy.exc import IntegrityError
@@ -18,17 +22,19 @@ from app.repositories.product_repository import (
 from app.schemas.product import ColorCreate, EngineCreate, ProductRead, TrimCreate
 from app.services.base import BaseService
 
+logger = logging.getLogger("bmw_api")
+
 
 class ProductService(BaseService):
     def __init__(
-        self,
-        session: AsyncSession,
-        products: ProductRepository,
-        engines: EngineRepository,
-        colors: ColorRepository,
-        trims: TrimRepository,
-        redis: Redis,
-        cache_enabled: bool = True,
+            self,
+            session: AsyncSession,
+            products: ProductRepository,
+            engines: EngineRepository,
+            colors: ColorRepository,
+            trims: TrimRepository,
+            redis: Redis,
+            cache_enabled: bool = True,
     ):
         super().__init__(session)
         self._products = products
@@ -43,19 +49,30 @@ class ProductService(BaseService):
         if not product:
             raise NotFoundException("Product not found")
 
+    @staticmethod
+    async def _serialize_in_executor(data: Any) -> str:
+        def serialize():
+            if isinstance(data, list):
+                return json.dumps([jsonable_encoder(ProductRead.model_validate(p)) for p in data])
+            return json.dumps(jsonable_encoder(ProductRead.model_validate(data)))
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, serialize)
+
     async def _invalidate_product_cache(self, product_id: uuid.UUID | None = None) -> None:
         if not self._cache_enabled:
             return
         patterns = ["catalog:products:v1:*"]
         if product_id:
             patterns.append(f"catalog:product:{product_id}")
-        try:
-            for pattern in patterns:
+
+        for pattern in patterns:
+            try:
                 keys = [key async for key in self._redis.scan_iter(match=pattern, count=100)]
                 if keys:
-                    await self._redis.delete(*keys)
-        except RedisError:
-            pass
+                    await self._redis.unlink(*keys)
+            except RedisError as e:
+                logger.error(f"Failed to invalidate cache for pattern {pattern}: {e}")
 
     async def list_products(self, **filters) -> Response:
         min_price = filters.get("min_price")
@@ -78,23 +95,22 @@ class ProductService(BaseService):
                     except RedisError:
                         pass
                     return Response(content=cached_data, media_type="application/json")
-            except RedisError:
-                pass
+            except RedisError as e:
+                logger.warning(f"Redis GET failed for list_products: {e}")
+
             try:
                 await self._redis.incr("catalog:metrics:products:misses")
             except RedisError:
                 pass
 
         products = await self._products.get_multi_filtered(**filters)
-
-        payload = [ProductRead.model_validate(p).model_dump(mode="json") for p in products]
-        serialized_data = json.dumps(payload)
+        serialized_data = await self._serialize_in_executor(products)
 
         if self._cache_enabled:
             try:
                 await self._redis.set(cache_key, serialized_data, ex=60)
-            except RedisError:
-                pass
+            except RedisError as e:
+                logger.warning(f"Redis SET failed for list_products: {e}")
 
         return Response(content=serialized_data, media_type="application/json")
 
@@ -106,25 +122,24 @@ class ProductService(BaseService):
                 cached_data = await self._redis.get(cache_key)
                 if cached_data is not None:
                     return Response(content=cached_data, media_type="application/json")
-            except RedisError:
-                pass
+            except RedisError as e:
+                logger.warning(f"Redis GET failed for get_product_or_404: {e}")
 
         product = await self._products.get_with_relations(product_id)
         if not product:
             raise NotFoundException("Product not found")
 
-        payload = ProductRead.model_validate(product).model_dump(mode="json")
-        serialized_data = json.dumps(payload)
+        serialized_data = await self._serialize_in_executor(product)
 
         if self._cache_enabled:
             try:
                 await self._redis.set(cache_key, serialized_data, ex=60)
-            except RedisError:
-                pass
+            except RedisError as e:
+                logger.warning(f"Redis SET failed for get_product_or_404: {e}")
 
         return Response(content=serialized_data, media_type="application/json")
 
-    async def _add_option(self, repository, product_id: uuid.UUID, payload):
+    async def _add_option(self, repository: Any, product_id: uuid.UUID, payload: Any):
         await self.ensure_exists(product_id)
         try:
             result = await repository.create({**payload.model_dump(), "product_id": product_id})
