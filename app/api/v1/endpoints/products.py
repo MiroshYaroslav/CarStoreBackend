@@ -32,7 +32,6 @@ def get_s3_service() -> S3Service:
 
 S3ServiceDep = Annotated[S3Service, Depends(get_s3_service)]
 
-
 router = APIRouter()
 
 
@@ -97,7 +96,7 @@ def get_product_service(
 ProductServiceDep = Annotated[ProductService, Depends(get_product_service)]
 
 
-@router.get("/", response_model=list[ProductRead])
+@router.get("/", responses={status.HTTP_200_OK: {"model": list[ProductRead]}})
 async def get_products(
     service: ProductServiceDep,
     category_id: list[uuid.UUID] | None = Query(None),
@@ -117,7 +116,7 @@ async def get_products(
     )
 
 
-@router.get("/{product_id}", response_model=ProductRead)
+@router.get("/{product_id}", responses={status.HTTP_200_OK: {"model": ProductRead}})
 async def get_product(product_id: uuid.UUID, service: ProductServiceDep):
     return await service.get_product_or_404(product_id)
 
@@ -151,7 +150,7 @@ async def soft_delete_product(product_id: uuid.UUID, service: ProductServiceDep,
     return {"status": "ok", "message": f"Product {product_id} deactivated successfully"}
 
 
-@router.post("/{product_id}/image", response_model=ProductRead)
+@router.post("/{product_id}/image", responses={status.HTTP_200_OK: {"model": ProductRead}})
 async def upload_product_image(
     product_id: uuid.UUID,
     _: ProductImageUploader,
@@ -159,7 +158,7 @@ async def upload_product_image(
     s3_service: S3ServiceDep,
     file: UploadFile = File(...),
 ):
-    await service.get_product_or_404(product_id)
+    await service.ensure_exists(product_id)
     image_url = await s3_service.upload_image(file)
 
     return await service.update_product_image(product_id, image_url)
