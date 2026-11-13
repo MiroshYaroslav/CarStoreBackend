@@ -73,7 +73,7 @@ class CatalogLoadShape(LoadTestShape):
         elif elapsed < self.ramp_seconds + self.hold_seconds:
             users = max_users
         elif elapsed < self.ramp_seconds + self.hold_seconds + self.down_seconds:
-            remaining = 1 - (elapsed - self.ramp_seconds - self.hold_seconds) / self.down_seconds
+            remaining = 1.0 - ((elapsed - self.ramp_seconds - self.hold_seconds) / self.down_seconds)
             users = max(0, round(max_users * remaining))
         else:
             return None
