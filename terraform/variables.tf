@@ -94,5 +94,5 @@ variable "ecs_max_capacity" {
 variable "cache_enabled" {
   description = "Enable Redis cache-aside for product reads. Set false for the uncached benchmark."
   type        = bool
-  default     = true
+  default     = false
 }
