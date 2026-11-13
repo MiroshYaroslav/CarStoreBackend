@@ -53,8 +53,10 @@ class ProductService(BaseService):
     async def _serialize_in_executor(data: Any) -> str:
         def serialize():
             if isinstance(data, list):
-                return json.dumps([jsonable_encoder(ProductRead.model_validate(p)) for p in data])
-            return json.dumps(jsonable_encoder(ProductRead.model_validate(data)))
+                dumped = [ProductRead.model_validate(p).model_dump(mode='json') for p in data]
+                return json.dumps(dumped)
+
+            return ProductRead.model_validate(data).model_dump_json()
 
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, serialize)

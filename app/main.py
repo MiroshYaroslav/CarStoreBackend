@@ -3,8 +3,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.router import router as api_router
@@ -50,20 +52,30 @@ async def lifespan(app: FastAPI):
         logger.info("Application shutdown complete.")
 
 
-app = FastAPI(title=settings.PROJECT_NAME, openapi_url="/api/v1/openapi.json", lifespan=lifespan)
+middlewares = [
+    Middleware(TimingMiddleware),
+    Middleware(
+        CORSMiddleware,
+        allow_origins=settings.CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    ),
+    Middleware(GZipMiddleware, minimum_size=1000),
+]
 
-app.add_exception_handler(AppException, app_exception_handler)
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(Exception, global_exception_handler)
-app.add_middleware(TimingMiddleware)
+exception_handlers = {
+    AppException: app_exception_handler,
+    RequestValidationError: validation_exception_handler,
+    Exception: global_exception_handler,
+}
 
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    openapi_url="/api/v1/openapi.json",
+    lifespan=lifespan,
+    middleware=middlewares,
+    exception_handlers=exception_handlers,
 )
 
 app.include_router(api_router, prefix="/api")

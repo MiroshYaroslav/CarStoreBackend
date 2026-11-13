@@ -2,7 +2,7 @@ import uuid
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status, Response
 
 from app.api.dependencies import CatalogAdmin, CurrentUser, DBSession
 from app.core.config import settings
@@ -96,7 +96,7 @@ def get_product_service(
 ProductServiceDep = Annotated[ProductService, Depends(get_product_service)]
 
 
-@router.get("/", responses={status.HTTP_200_OK: {"model": list[ProductRead]}})
+@router.get("/", responses={status.HTTP_200_OK: {"description": "List of products"}})
 async def get_products(
     service: ProductServiceDep,
     category_id: list[uuid.UUID] | None = Query(None),
@@ -105,7 +105,7 @@ async def get_products(
     max_price: Decimal | None = Query(None),
     sort: str | None = Query(None),
     active_only: bool = Query(True),
-):
+) -> Response:
     return await service.list_products(
         category_id=category_id,
         search=search,
@@ -115,9 +115,8 @@ async def get_products(
         active_only=active_only,
     )
 
-
-@router.get("/{product_id}", responses={status.HTTP_200_OK: {"model": ProductRead}})
-async def get_product(product_id: uuid.UUID, service: ProductServiceDep):
+@router.get("/{product_id}", responses={status.HTTP_200_OK: {"description": "Product detail"}})
+async def get_product(product_id: uuid.UUID, service: ProductServiceDep) -> Response:
     return await service.get_product_or_404(product_id)
 
 
