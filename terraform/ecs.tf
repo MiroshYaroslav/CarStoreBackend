@@ -72,13 +72,21 @@ resource "aws_ecs_task_definition" "app" {
       image        = "${aws_ecr_repository.app.repository_url}:${var.app_image_tag}"
       essential    = true
       portMappings = [{ containerPort = 8000, hostPort = 8000, protocol = "tcp" }]
+
+      dependsOn = [
+        {
+          containerName = "redis-cache"
+          condition     = "START"
+        }
+      ]
+
       environment = [
         { name = "ENVIRONMENT", value = var.environment },
         { name = "POSTGRES_USER", value = var.db_username },
         { name = "POSTGRES_DB", value = aws_db_instance.main.db_name },
         { name = "POSTGRES_HOST", value = aws_db_instance.main.address },
         { name = "POSTGRES_PORT", value = "5432" },
-        { name = "REDIS_URL", value = "redis://127.0.0.1:6379" },
+        { name = "REDIS_URL", value = "redis://127.0.0.1:6379/0" },
         { name = "CACHE_ENABLED", value = tostring(var.cache_enabled) },
         { name = "CORS_ORIGINS", value = jsonencode(["https://auto-catalog.app", "https://auto-catalog-blue.vercel.app"]) },
         { name = "AWS_REGION", value = var.aws_region },
@@ -115,6 +123,7 @@ resource "aws_ecs_task_definition" "app" {
       }
     }
   ])
+
   depends_on = [
     aws_iam_role_policy_attachment.ecs_task_execution,
     aws_iam_role_policy.ecs_read_app_secrets
