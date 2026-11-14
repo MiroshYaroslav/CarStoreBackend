@@ -1,0 +1,7 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+GET,GET product detail,HTTPError('500 Server Error: Internal Server Error for url: GET product detail'),165,2026-11-13T18:36:10Z,2026-11-13T18:42:11Z
+POST,POST callback request (write),HTTPError('500 Server Error: Internal Server Error for url: POST callback request (write)'),54,2026-11-13T18:36:13Z,2026-11-13T18:42:17Z
+GET,GET products read,HTTPError('500 Server Error: Internal Server Error for url: GET products read'),280,2026-11-13T18:36:11Z,2026-11-13T18:42:22Z
+GET,GET product detail,HTTPError('502 Server Error: Bad Gateway for url: GET product detail'),45,2026-11-13T18:36:20Z,2026-11-13T18:41:54Z
+POST,POST callback request (write),HTTPError('502 Server Error: Bad Gateway for url: POST callback request (write)'),20,2026-11-13T18:36:10Z,2026-11-13T18:41:49Z
+GET,GET products read,HTTPError('502 Server Error: Bad Gateway for url: GET products read'),99,2026-11-13T18:36:13Z,2026-11-13T18:42:22Z
