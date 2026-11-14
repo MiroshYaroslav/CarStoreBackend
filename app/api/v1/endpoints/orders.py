@@ -1,8 +1,9 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 
 from app.api.dependencies import CurrentUser, DBSession, get_optional_user
+from app.core.idempotency import IdempotencyDep
 from app.models.user import User
 from app.repositories.cart_repository import CartRepository
 from app.repositories.order_repository import OrderItemRepository, OrderRepository
@@ -40,9 +41,17 @@ OrderServiceDep = Annotated[OrderService, Depends(get_order_service)]
 
 @router.post("/", response_model=OrderRead, status_code=status.HTTP_201_CREATED)
 async def create_order(
-    order_in: OrderCreate, service: OrderServiceDep, user: User | None = Depends(get_optional_user)
+    order_in: OrderCreate,
+    response: Response,
+    service: OrderServiceDep,
+    idempotency: IdempotencyDep,
+    user: User | None = Depends(get_optional_user),
 ):
-    return await service.create_order(order_in, user_id=user.id if user else None)
+    return await idempotency.execute(
+        response=response,
+        status_code=status.HTTP_201_CREATED,
+        action=lambda: service.create_order(order_in, user_id=user.id if user else None),
+    )
 
 
 @router.get("/my", response_model=list[OrderRead])
