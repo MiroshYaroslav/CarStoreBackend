@@ -15,6 +15,7 @@ from app.models.product_trim import ProductTrim
 from app.models.review import Review
 from app.models.session import Session
 from app.models.user import User
+from app.models.async_task import AsyncTask
 
 __all__ = [
     "BaseDB",
@@ -32,4 +33,5 @@ __all__ = [
     "CallbackRequest",
     "CallbackContact",
     "Session",
+    "AsyncTask",
 ]
