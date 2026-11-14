@@ -289,7 +289,7 @@ resource "aws_ecs_service" "worker" {
   tags       = { Name = "${local.name}-worker-service" }
 
   lifecycle {
-    ignore_changes = [desired_count]
+    ignore_changes = [desired_count, task_definition]
   }
 }
 

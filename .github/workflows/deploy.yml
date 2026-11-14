@@ -18,6 +18,8 @@ env:
   ECR_REPOSITORY: bmw-catalog-dev
   ECS_CLUSTER: bmw-catalog-dev-cluster
   ECS_SERVICE: bmw-catalog-dev-service
+  ECS_WORKER_SERVICE: bmw-catalog-dev-worker-service
+  WORKER_TASK_FAMILY: bmw-catalog-dev-worker
 
 jobs:
   deploy:
@@ -159,18 +161,39 @@ jobs:
 
           echo "task-definition-arn=$TASK_DEFINITION_ARN" >> "$GITHUB_OUTPUT"
 
-      - name: Update ECS service after successful migration
+      - name: Update ECS services after successful migration
         env:
           TASK_DEFINITION_ARN: ${{ steps.migration.outputs.task-definition-arn }}
+          IMAGE_URI: ${{ steps.build-image.outputs.image }}
         run: |
           set -euo pipefail
+
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \
             --task-definition "$TASK_DEFINITION_ARN" \
             --region "$AWS_REGION"
 
+          WORKER_TD_ARN="$(aws ecs describe-task-definition \
+            --task-definition "$WORKER_TASK_FAMILY" \
+            --query 'taskDefinition' \
+            --region "$AWS_REGION" \
+            --output json | jq --arg IMG "$IMAGE_URI" '
+              del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
+              | .containerDefinitions |= map(if .name == "bmw-catalog-worker" then .image = $IMG else . end)
+            ' | aws ecs register-task-definition \
+              --cli-input-json file:///dev/stdin \
+              --query 'taskDefinition.taskDefinitionArn' \
+              --region "$AWS_REGION" \
+              --output text)"
+
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_WORKER_SERVICE" \
+            --task-definition "$WORKER_TD_ARN" \
+            --region "$AWS_REGION"
+
           aws ecs wait services-stable \
             --cluster "$ECS_CLUSTER" \
-            --services "$ECS_SERVICE" \
+            --services "$ECS_SERVICE" "$ECS_WORKER_SERVICE" \
             --region "$AWS_REGION"
