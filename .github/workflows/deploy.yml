@@ -172,26 +172,30 @@ jobs:
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \
             --task-definition "$TASK_DEFINITION_ARN" \
-            --region "$AWS_REGION"
+            --region "$AWS_REGION" \
+            --output text > /dev/null
 
-          WORKER_TD_ARN="$(aws ecs describe-task-definition \
+          aws ecs describe-task-definition \
             --task-definition "$WORKER_TASK_FAMILY" \
             --query 'taskDefinition' \
             --region "$AWS_REGION" \
             --output json | jq --arg IMG "$IMAGE_URI" '
               del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
               | .containerDefinitions |= map(if .name == "bmw-catalog-worker" then .image = $IMG else . end)
-            ' | aws ecs register-task-definition \
-              --cli-input-json file:///dev/stdin \
-              --query 'taskDefinition.taskDefinitionArn' \
-              --region "$AWS_REGION" \
-              --output text)"
+            ' > worker-task-definition.json
+
+          WORKER_TD_ARN="$(aws ecs register-task-definition \
+            --cli-input-json file://worker-task-definition.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --region "$AWS_REGION" \
+            --output text)"
 
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_WORKER_SERVICE" \
             --task-definition "$WORKER_TD_ARN" \
-            --region "$AWS_REGION"
+            --region "$AWS_REGION" \
+            --output text > /dev/null
 
           aws ecs wait services-stable \
             --cluster "$ECS_CLUSTER" \
